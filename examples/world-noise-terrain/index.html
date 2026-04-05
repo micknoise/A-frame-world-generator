@@ -183,10 +183,9 @@
           params
         );
 
-        var spawnY = Math.max(data.waterLevelY + 1.8, data.centerY + 2.2);
         document.getElementById('player').setAttribute('position', {
           x: 0,
-          y: spawnY,
+          y: data.spawnPlayerY,
           z: 0
         });
 

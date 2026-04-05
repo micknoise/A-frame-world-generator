@@ -9,7 +9,7 @@
  *   - flat transparent ocean plane at the normalized water threshold (world Y = wl × heightScale)
  *
  * Public API (attached to window):
- *   NoiseTerrain.generate(params)  → { positions, colors, normals, indices, … }
+ *   NoiseTerrain.generate(params)  → { positions, colors, normals, indices, spawnPlayerY, … }
  *   NoiseTerrain.build(scene, params) → terrain + ocean meshes.
  *   scene may be:
  *     { object3D } — legacy: both meshes under the same group (fly demos).
@@ -121,6 +121,36 @@
     return LAND_BANDS[LAND_BANDS.length - 1][1];
   }
 
+  /** Bilinear sample on row-major heightmap (flat array, size res × res; row iy = world Z). */
+  function sampleHeightmapBilinear(hmap, res, fx, fz) {
+    var x0 = Math.floor(fx);
+    var z0 = Math.floor(fz);
+    var tx = fx - x0;
+    var tz = fz - z0;
+    var x1 = Math.min(res - 1, x0 + 1);
+    var z1 = Math.min(res - 1, z0 + 1);
+    var v00 = hmap[z0 * res + x0];
+    var v10 = hmap[z0 * res + x1];
+    var v01 = hmap[z1 * res + x0];
+    var v11 = hmap[z1 * res + x1];
+    return (
+      v00 * (1 - tx) * (1 - tz) +
+      v10 * tx * (1 - tz) +
+      v01 * (1 - tx) * tz +
+      v11 * tx * tz
+    );
+  }
+
+  function worldXZToSurfaceY(hmap, res, step, half, heightScale, worldX, worldZ) {
+    var fx = (worldX + half) / step;
+    var fz = (worldZ + half) / step;
+    if (fx < 0) fx = 0;
+    if (fz < 0) fz = 0;
+    if (fx > res - 1) fx = res - 1;
+    if (fz > res - 1) fz = res - 1;
+    return sampleHeightmapBilinear(hmap, res, fx, fz) * heightScale;
+  }
+
   // ── Generate data ───────────────────────────────────────────────────────────
 
   /**
@@ -230,6 +260,12 @@
     var mid = Math.floor(res / 2);
     var midIdx = mid * res + mid;
     var centerY = positions[midIdx * 3 + 1];
+    var heightAtOrigin = worldXZToSurfaceY(heightmap, res, step, half, heightScale, 0, 0);
+    var wlY = wl * heightScale;
+    var surfaceY = Math.max(heightAtOrigin, centerY);
+    if (surfaceY < wlY + 0.05) surfaceY = wlY + 0.08;
+    /* a-game player origin + locomotion recovery; clearance above actual mesh surface. */
+    var spawnPlayerY = surfaceY + 3.1;
 
     return {
       positions: positions,
@@ -239,8 +275,10 @@
       res: res,
       worldScale: worldScale,
       heightScale: heightScale,
-      waterLevelY: wl * heightScale,
-      centerY: centerY
+      waterLevelY: wlY,
+      centerY: centerY,
+      heightAtOrigin: heightAtOrigin,
+      spawnPlayerY: spawnPlayerY
     };
   }
 
@@ -298,7 +336,8 @@
       roughness: 0.85,
       metalness: 0.05,
       flatShading: false,
-      side: THREE.DoubleSide
+      /* FrontSide: downward floor raycasts must hit top faces only (DoubleSide snaps to underside). */
+      side: THREE.FrontSide
     });
 
     var terrainMesh = new THREE.Mesh(geo, mat);

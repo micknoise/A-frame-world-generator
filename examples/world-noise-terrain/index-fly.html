@@ -154,8 +154,9 @@
         var data = NoiseTerrain.build(wrapper, readParams());
 
         var rig = document.getElementById('rig');
-        var eye = data.centerY + Math.max(25, data.heightScale * 0.9);
-        rig.setAttribute('position', '0 ' + eye + ' 0');
+        var base = Math.max(data.centerY, data.heightAtOrigin);
+        var rigY = base + Math.max(25, data.heightScale * 0.9);
+        rig.setAttribute('position', '0 ' + rigY + ' 0');
       }
 
       document.getElementById('generateBtn').addEventListener('click', rebuildTerrain);
