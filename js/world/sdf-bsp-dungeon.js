@@ -9,6 +9,13 @@
  * ----------
  *   SdfBspDungeon.build(rootEl, tiles, options) → { spawnWorld }
  *
+ * Optional (defaults match original flat ceiling + greyscale vertex tint):
+ *   ceilingMode: 'flat' | 'dome' — dome raises ceiling toward map centre (cavern roof).
+ *   ceilingDomeAmplitude, ceilingDomeFalloff, ceilingDetailAmplitude, ceilingDetailScale
+ *   albedoMode: 'luminance' | 'white' — white keeps vertex colour 1,1,1 for neutral rock.
+ *   grainNeutral: true — tight grey grain (~248–255) so albedo stays white.
+ *   materialColor: THREE.Color or hex number for MeshStandardMaterial.color
+ *
  * Depends on window.MC_EDGE_TABLE and window.MC_TRI_TABLE (mc-tables.js).
  */
 (function () {
@@ -85,7 +92,7 @@
     return sum / maxAmp;
   };
 
-  function generateGrainTexture(seed, size) {
+  function generateGrainTexture(seed, size, neutral) {
     size = size || 256;
     var grainNoise = new ValueNoise(seed ^ 0xBEEF);
     var canvas = document.createElement('canvas');
@@ -99,8 +106,13 @@
         u = px / size;
         v = py / size;
         grain = grainNoise.fbm(u * 24, v * 24, 3);
-        grey = Math.floor(200 + grain * 55);
-        grey = Math.max(180, Math.min(255, grey));
+        if (neutral) {
+          grey = Math.floor(248 + grain * 7);
+          grey = Math.max(245, Math.min(255, grey));
+        } else {
+          grey = Math.floor(200 + grain * 55);
+          grey = Math.max(180, Math.min(255, grey));
+        }
         off = (py * size + px) * 4;
         data[off] = grey; data[off + 1] = grey; data[off + 2] = grey; data[off + 3] = 255;
       }
@@ -125,7 +137,33 @@
     return list;
   }
 
-  function makeSolidSdf(walls, WH, kWall, kCap) {
+  function makeSolidSdf(walls, WH, kWall, kCap, ceilingCfg) {
+    ceilingCfg = ceilingCfg || { mode: 'flat' };
+    var mode = ceilingCfg.mode || 'flat';
+    var worldCX = ceilingCfg.worldCX;
+    var worldCZ = ceilingCfg.worldCZ;
+    var invRx = ceilingCfg.invRx;
+    var invRz = ceilingCfg.invRz;
+    var domeAmp = ceilingCfg.domeAmp != null ? ceilingCfg.domeAmp : 0;
+    var domeFall = ceilingCfg.domeFall != null ? ceilingCfg.domeFall : 1.25;
+    var ceilNoise = ceilingCfg.ceilNoise;
+    var ceilDetAmp = ceilingCfg.ceilDetAmp != null ? ceilingCfg.ceilDetAmp : 0;
+    var ceilDetScale = ceilingCfg.ceilDetScale != null ? ceilingCfg.ceilDetScale : 0.1;
+
+    function ceilingY(px, pz) {
+      var y = WH;
+      if (mode === 'dome') {
+        var nx = (px - worldCX) * invRx;
+        var nz = (pz - worldCZ) * invRz;
+        var r2 = nx * nx + nz * nz;
+        y += domeAmp * Math.exp(-r2 * domeFall);
+      }
+      if (ceilNoise && ceilDetAmp > 0) {
+        y += (ceilNoise.fbm(px * ceilDetScale, pz * ceilDetScale, 3) - 0.5) * 2 * ceilDetAmp;
+      }
+      return y;
+    }
+
     return function sdf(px, py, pz) {
       var d = 1e9;
       var i, w;
@@ -138,7 +176,8 @@
         );
       }
       d = smin(d, py, kCap);
-      d = smin(d, WH - py, kCap);
+      var cy = mode === 'flat' ? WH : ceilingY(px, pz);
+      d = smin(d, cy - py, kCap);
       return d;
     };
   }
@@ -223,7 +262,7 @@
 
           triTable = TT[cubeIndex];
           for (t = 0; t < 16 && triTable[t] >= 0; t += 3) {
-            for (i = 0; i < 3; i++) {
+            for (var i = 0; i < 3; i++) {
               var vi = triTable[t + i];
               var vp = vertList[vi];
               positions.push(vp.x, vp.y, vp.z);
@@ -236,7 +275,7 @@
     return positions;
   }
 
-  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE) {
+  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode) {
     var triCount = positions.length / 9;
     var vertCount = triCount * 3;
     var pos = new Float32Array(vertCount * 3);
@@ -268,9 +307,15 @@
         pos[vidx * 3 + 1] = py;
         pos[vidx * 3 + 2] = pz;
 
-        colors[vidx * 3] = lum;
-        colors[vidx * 3 + 1] = lum;
-        colors[vidx * 3 + 2] = lum;
+        if (albedoMode === 'white') {
+          colors[vidx * 3] = 1;
+          colors[vidx * 3 + 1] = 1;
+          colors[vidx * 3 + 2] = 1;
+        } else {
+          colors[vidx * 3] = lum;
+          colors[vidx * 3 + 1] = lum;
+          colors[vidx * 3 + 2] = lum;
+        }
 
         g = sdfGradient(sdf, px, py, pz, eps);
         normals[vidx * 3] = g.x;
@@ -317,10 +362,10 @@
     return geo;
   }
 
-  function feetSpawnY(sdf, px, pz, WH) {
+  function feetSpawnY(sdf, px, pz, yMax) {
     var y = 0.08;
     var step = 0.04;
-    while (y < WH + 0.5) {
+    while (y < yMax) {
       if (sdf(px, y, pz) > 0) return y + 0.35;
       y += step;
     }
@@ -340,20 +385,45 @@
     var nOct = options.octaves != null ? options.octaves : 4;
     var dispAmp = options.surfaceDisplacement != null ? options.surfaceDisplacement : 0.09;
     var uvScale = options.uvScale != null ? options.uvScale : 2;
+    var ceilingMode = options.ceilingMode != null ? options.ceilingMode : 'flat';
+    var domeAmp = options.ceilingDomeAmplitude != null ? options.ceilingDomeAmplitude : 0;
+    var domeFall = options.ceilingDomeFalloff != null ? options.ceilingDomeFalloff : 1.25;
+    var ceilDetAmp = options.ceilingDetailAmplitude != null ? options.ceilingDetailAmplitude : 0;
+    var ceilDetScale = options.ceilingDetailScale != null ? options.ceilingDetailScale : 0.1;
+    var albedoMode = options.albedoMode != null ? options.albedoMode : 'luminance';
+    var grainNeutral = !!options.grainNeutral;
+    var matColorOpt = options.materialColor;
 
     var H = tiles.length;
     var W = tiles[0].length;
 
+    var worldW = W * CS;
+    var worldD = H * CS;
+    var ceilNoisePre = new ValueNoise((seed ^ 0xCAFE) >>> 0);
+    var ceilingCfg = {
+      mode: ceilingMode,
+      worldCX: worldW * 0.5,
+      worldCZ: worldD * 0.5,
+      invRx: 1 / Math.max(worldW * 0.45, 0.001),
+      invRz: 1 / Math.max(worldD * 0.45, 0.001),
+      domeAmp: domeAmp,
+      domeFall: domeFall,
+      ceilNoise: ceilDetAmp > 0 ? ceilNoisePre : null,
+      ceilDetAmp: ceilDetAmp,
+      ceilDetScale: ceilDetScale
+    };
+
     var walls = buildWallColumns(tiles, W, H, CS, WH);
-    var sdf = makeSolidSdf(walls, WH, kWall, kCap);
+    var sdf = makeSolidSdf(walls, WH, kWall, kCap, ceilingCfg);
 
     var pad = Math.max(kWall * 2.5, CS * 0.75);
     var minX = -pad;
-    var maxX = W * CS + pad;
+    var maxX = worldW + pad;
     var minY = -pad * 0.5;
-    var maxY = WH + pad * 0.5;
+    var ceilExtra = ceilingMode === 'dome' ? domeAmp + ceilDetAmp + pad * 0.35 : 0;
+    var maxY = WH + pad * 0.5 + ceilExtra;
     var minZ = -pad;
-    var maxZ = H * CS + pad;
+    var maxZ = worldD + pad;
 
     var maxSpan = Math.max(maxX - minX, maxZ - minZ, maxY - minY);
     var voxelStep = options.voxelStep != null ? options.voxelStep : Math.max(0.48, Math.min(0.72, maxSpan / 96));
@@ -390,10 +460,10 @@
     if (soup.length < 9) {
       geo = new THREE.BoxGeometry(CS * 2, 0.2, CS * 2);
     } else {
-      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE);
+      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode);
     }
 
-    var grainCanvas = generateGrainTexture(seed, 256);
+    var grainCanvas = generateGrainTexture(seed, 256, grainNeutral);
     var grainTex = new THREE.CanvasTexture(grainCanvas);
     grainTex.wrapS = THREE.RepeatWrapping;
     grainTex.wrapT = THREE.RepeatWrapping;
@@ -402,14 +472,18 @@
     grainTex.anisotropy = 4;
     grainTex.needsUpdate = true;
 
-    var mat = new THREE.MeshStandardMaterial({
+    var matOpts = {
       map: grainTex,
       vertexColors: true,
       flatShading: false,
       roughness: 0.88,
       metalness: 0.03,
       side: THREE.FrontSide
-    });
+    };
+    if (matColorOpt != null) {
+      matOpts.color = matColorOpt instanceof THREE.Color ? matColorOpt : new THREE.Color(matColorOpt);
+    }
+    var mat = new THREE.MeshStandardMaterial(matOpts);
 
     var mesh = new THREE.Mesh(geo, mat);
 
@@ -428,7 +502,8 @@
     spawnTile = spawnTile || { x: 1, y: 1 };
     var spx = (spawnTile.x + 0.5) * CS;
     var spz = (spawnTile.y + 0.5) * CS;
-    var spy = feetSpawnY(sdf, spx, spz, WH);
+    var spawnYMax = WH + domeAmp + ceilDetAmp + 2;
+    var spy = feetSpawnY(sdf, spx, spz, spawnYMax);
 
     var startMarker = document.createElement('a-box');
     startMarker.setAttribute('start', '');
