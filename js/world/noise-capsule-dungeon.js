@@ -1,7 +1,8 @@
 /**
  * noise-capsule-dungeon.js — BSP dungeon with axis-aligned ellipsoid rooms (squashed spheres that
- * match each carved room box in XZ and wall height in Y) and open cylindrical tube corridors on the
- * same corridorLegs as bsp-dungeon carveCorridor (no end caps, inward normals). Same displacement
+ * match each carved room box in XZ and wall height in Y, enlarged so tube intersections aren’t
+ * pinched) and open tubes on the same corridorLegs as bsp-dungeon carveCorridor. Ellipsoids are
+ * clipped where corridor cylinders pass through (union of voids). Same displacement
  * and materials as noise-dungeon.js (axis/triplanar fBm, grain, vertex luminance).
  *
  * PUBLIC API
@@ -198,6 +199,105 @@
         var ln = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
         return { x: nx / ln, y: ny / ln, z: nz / ln };
       }
+    };
+  }
+
+  /** BSP room floor rect in tile space (x,z) vs one axis-aligned corridor leg. */
+  function legIntersectsRoomBBox(leg, room) {
+    var minX = room.x;
+    var maxX = room.x + room.width - 1;
+    var minZ = room.y;
+    var maxZ = room.y + room.height - 1;
+    if (leg.sy === leg.ey) {
+      var zz = leg.sy;
+      if (zz < minZ || zz > maxZ) return false;
+      var xa = Math.min(leg.sx, leg.ex);
+      var xb = Math.max(leg.sx, leg.ex);
+      return xb >= minX && xa <= maxX;
+    }
+    if (leg.sx === leg.ex) {
+      var xx = leg.sx;
+      if (xx < minX || xx > maxX) return false;
+      var za = Math.min(leg.sy, leg.ey);
+      var zb = Math.max(leg.sy, leg.ey);
+      return zb >= minZ && za <= maxZ;
+    }
+    return false;
+  }
+
+  function distPointToSeg3(px, py, pz, ax, ay, az, bx, by, bz) {
+    var abx = bx - ax;
+    var aby = by - ay;
+    var abz = bz - az;
+    var ab2 = abx * abx + aby * aby + abz * abz;
+    var t;
+    if (ab2 < 1e-14) {
+      var dx0 = px - ax;
+      var dy0 = py - ay;
+      var dz0 = pz - az;
+      return Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+    }
+    t = ((px - ax) * abx + (py - ay) * aby + (pz - az) * abz) / ab2;
+    if (t < 0) t = 0;
+    else if (t > 1) t = 1;
+    var qx = ax + abx * t;
+    var qy = ay + aby * t;
+    var qz = az + abz * t;
+    var dx = px - qx;
+    var dy = py - qy;
+    var dz = pz - qz;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  /**
+   * Remove ellipsoid triangles whose vertices lie inside corridor cylinders (boolean-style union
+   * with tubes so openings are walkable and physics doesn’t seal the mouth).
+   */
+  function clipEllipsoidMeshByCorridors(meshData, legs, room, CS, midY, clipRadius) {
+    if (!meshData.vertCount || !legs || !legs.length) return meshData;
+    var relevant = [];
+    var li, L;
+    for (li = 0; li < legs.length; li++) {
+      if (legIntersectsRoomBBox(legs[li], room)) relevant.push(legs[li]);
+    }
+    if (!relevant.length) return meshData;
+
+    var pos = meshData.positions;
+    var idx = meshData.indices;
+    var newIdx = [];
+    var t, ax, az, bx, bz;
+    var R = clipRadius;
+
+    function vtxInUnion(vi) {
+      var px = pos[vi * 3];
+      var py = pos[vi * 3 + 1];
+      var pz = pos[vi * 3 + 2];
+      var j;
+      for (j = 0; j < relevant.length; j++) {
+        L = relevant[j];
+        ax = L.sx * CS;
+        az = L.sy * CS;
+        bx = L.ex * CS;
+        bz = L.ey * CS;
+        if (distPointToSeg3(px, py, pz, ax, midY, az, bx, midY, bz) < R) return true;
+      }
+      return false;
+    }
+
+    for (t = 0; t < idx.length; t += 3) {
+      var i0 = idx[t];
+      var i1 = idx[t + 1];
+      var i2 = idx[t + 2];
+      if (vtxInUnion(i0) || vtxInUnion(i1) || vtxInUnion(i2)) continue;
+      newIdx.push(i0, i1, i2);
+    }
+
+    if (newIdx.length < 36) return meshData;
+    return {
+      positions: meshData.positions,
+      indices: new Uint32Array(newIdx),
+      vertCount: meshData.vertCount,
+      normalAt: meshData.normalAt
     };
   }
 
@@ -451,8 +551,16 @@
     var ceilAmp = options.ceilingDisplacement != null ? options.ceilingDisplacement : 0.25;
     var uvScale = options.uvScale != null ? options.uvScale : 2;
     var sphereSeg = options.sphereSegments != null ? options.sphereSegments : 32;
-    var roomInset = options.roomBoxInset != null ? options.roomBoxInset : 0.985;
+    var roomInset = options.roomBoxInset != null ? options.roomBoxInset : 0.998;
+    var roomEllipsoidScale =
+      options.roomEllipsoidScale != null ? options.roomEllipsoidScale : 1.14;
+    var roomEllipsoidMaxBulge =
+      options.roomEllipsoidMaxBulge != null ? options.roomEllipsoidMaxBulge : 1.045;
     var capRadius = options.corridorRadius != null ? options.corridorRadius : CS * 0.46;
+    var corridorClipMargin =
+      options.corridorClipMargin != null
+        ? options.corridorClipMargin
+        : Math.max(CS * 0.11, capRadius * 0.38);
     var spawnFeetOffset =
       options.spawnFeetOffset != null ? options.spawnFeetOffset : 1.15 + floorAmp + wallAmp * 0.35;
     var capAround =
@@ -475,29 +583,45 @@
     var H = bsp.height;
 
     var parts = [];
-    var ri, r, cx, cy, cz, rx, ry, rz, rawRoom, rawTube, midY;
+    var ri, r, cx, cy, cz, rx, ry, rz, rawRoom, rawTube, midY, li;
     midY = WH * 0.5;
+    var legs = bsp.corridorLegs || [];
+    var clipR = capRadius + corridorClipMargin;
+
+    function roomSemiAxes(room) {
+      var rxMax = room.width * CS * 0.5;
+      var rzMax = room.height * CS * 0.5;
+      var ryMax = WH * 0.5;
+      var arx = Math.min(rxMax * roomEllipsoidMaxBulge, rxMax * roomInset * roomEllipsoidScale);
+      var arz = Math.min(rzMax * roomEllipsoidMaxBulge, rzMax * roomInset * roomEllipsoidScale);
+      var ary = Math.min(ryMax * roomEllipsoidMaxBulge, ryMax * roomInset * roomEllipsoidScale);
+      var cylRy = capRadius * 1.75;
+      if (ary < cylRy) ary = Math.min(ryMax * roomEllipsoidMaxBulge, cylRy);
+      var cylH = capRadius * 1.38;
+      if (arx < cylH) arx = Math.min(rxMax * roomEllipsoidMaxBulge, cylH);
+      if (arz < cylH) arz = Math.min(rzMax * roomEllipsoidMaxBulge, cylH);
+      if (arx < CS * 0.18) arx = CS * 0.18;
+      if (arz < CS * 0.18) arz = CS * 0.18;
+      if (ary < CS * 0.15) ary = CS * 0.15;
+      return { rx: arx, ry: ary, rz: arz };
+    }
 
     for (ri = 0; ri < regions.length; ri++) {
       r = regions[ri];
       cx = (r.x + r.width * 0.5) * CS;
       cy = midY;
       cz = (r.y + r.height * 0.5) * CS;
-      /* Same footprint as BSP floor rect: half-extents of the room box in world units, slightly inset. */
-      rx = r.width * CS * 0.5 * roomInset;
-      rz = r.height * CS * 0.5 * roomInset;
-      ry = WH * 0.5 * roomInset;
-      if (rx < CS * 0.18) rx = CS * 0.18;
-      if (rz < CS * 0.18) rz = CS * 0.18;
-      if (ry < CS * 0.15) ry = CS * 0.15;
+      var axes = roomSemiAxes(r);
+      rx = axes.rx;
+      ry = axes.ry;
+      rz = axes.rz;
       rawRoom = buildEllipsoidMesh(cx, cy, cz, rx, ry, rz, sphereSeg, sphereSeg);
+      rawRoom = clipEllipsoidMeshByCorridors(rawRoom, legs, r, CS, midY, clipR);
       var procS = processMesh(rawRoom, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
       if (procS) parts.push(procS);
     }
-
-    var legs = bsp.corridorLegs;
     var li, ax, az, bx, bz, segAlong, lenLeg;
-    if (legs && legs.length) {
+    if (legs.length) {
       for (li = 0; li < legs.length; li++) {
         ax = legs[li].sx * CS;
         az = legs[li].sy * CS;
@@ -571,7 +695,7 @@
     rootEl.appendChild(floorEl);
     floorEl.setObject3D('mesh', mesh);
 
-    var rySpawn = WH * 0.5 * roomInset;
+    var rySpawn = regions.length ? roomSemiAxes(regions[0]).ry : WH * 0.5 * roomInset * roomEllipsoidScale;
     var spawnY = midY - rySpawn + spawnFeetOffset;
     if (spawnY < 0.5) spawnY = 0.5;
     var spawnWorld;
