@@ -1,1 +1,4 @@
 .DS_Store
+
+# Local Claude/Codex worktrees — never submodule these (breaks CI submodule fetch).
+.claude/worktrees/
