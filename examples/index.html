@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World-gen examples (BSP + ridge)</title>
+    <link rel="icon" href="data:," />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 44rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.45;
+      }
+      a {
+        color: #1565c0;
+      }
+      ul {
+        padding-left: 1.2rem;
+      }
+      code {
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Procedural world examples</h1>
+    <p>
+      These scenes use algorithms ported from
+      <a href="https://github.com/micknoise/world-gen">github.com/micknoise/world-gen</a>
+      (BSP dungeon + ridge dungeon), combined for a-game / A-Frame 1.3 with vendored libs. Serve the
+      <strong>repository root</strong> over HTTP and open paths below (not <code>file://</code>).
+    </p>
+    <ul>
+      <li>
+        <a href="world-bsp-ridge-carve/">BSP + ridge carve</a> — organic pockets grow from the BSP
+        dungeon only where ridge noise agrees and touches existing floor.
+      </li>
+      <li>
+        <a href="world-bsp-ridge-union/">BSP + ridge union</a> — walkable if either BSP or ridge says
+        open; then flood-filled from the BSP spawn so you stay in one connected region.
+      </li>
+      <li>
+        <a href="world-bsp-ridge-rooms/">Ridge cavern + BSP rooms</a> — ridge forms the cave; BSP room
+        rectangles are forced open as anchor chambers.
+      </li>
+    </ul>
+    <p>
+      Append <code>?seed=123</code> to any example URL to fix a layout. Main demo:
+      <a href="../">repository root <code>index.html</code></a> (simple arena + crates).
+    </p>
+  </body>
+</html>

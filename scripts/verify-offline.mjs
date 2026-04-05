@@ -21,6 +21,10 @@ const required = [
   'libs/a-game/cannonWorker.min.js',
   'js/aframe-cdn-rewrite.js',
   'js/world/generator.js',
+  'js/world/bsp-dungeon.js',
+  'js/world/ridge-field.js',
+  'js/world/combine-bsp-ridge.js',
+  'js/world/grid-build.js',
   ...AFRAME_13_CDN_PATHS.map((p) => join('libs/aframe-cdn', p))
 ];
 

@@ -3,44 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Procedural A-Frame world</title>
+    <title>BSP + ridge union (a-game)</title>
     <link rel="icon" href="data:," />
-    <!-- For GitHub Pages project sites, set: <base href="/REPO_NAME/" /> -->
     <script>
-      window.AFRAME_CDN_ROOT = new URL('libs/aframe-cdn/', document.baseURI).href;
+      window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
     </script>
-    <script src="js/aframe-cdn-rewrite.js"></script>
-    <script src="libs/aframe/aframe-v1.3.0.min.js"></script>
+    <script src="../../js/aframe-cdn-rewrite.js"></script>
+    <script src="../../libs/aframe/aframe-v1.3.0.min.js"></script>
     <script>
       if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
         delete AFRAME.components.grabbable;
       }
     </script>
-    <script src="libs/a-game/a-game.min.js"></script>
-    <script src="js/world/bsp-dungeon.js"></script>
-    <script src="js/world/ridge-field.js"></script>
-    <script src="js/world/combine-bsp-ridge.js"></script>
-    <script src="js/world/grid-build.js"></script>
-    <script src="js/world/generator.js"></script>
+    <script src="../../libs/a-game/a-game.min.js"></script>
+    <script src="../../js/world/bsp-dungeon.js"></script>
+    <script src="../../js/world/ridge-field.js"></script>
+    <script src="../../js/world/combine-bsp-ridge.js"></script>
+    <script src="../../js/world/grid-build.js"></script>
   </head>
   <body>
-    <a
-      href="examples/"
-      style="position: fixed; top: 8px; left: 8px; z-index: 10; font: 13px system-ui, sans-serif; padding: 6px 10px; background: rgba(0, 0, 0, 0.55); color: #fff; border-radius: 6px; text-decoration: none"
-      >BSP + ridge examples</a
-    >
     <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
     <a-scene
       id="scene"
-      physics="workerUrl: libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
+      physics="workerUrl: ../../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
       loading-screen="enabled: false"
     >
       <a-assets></a-assets>
-      <a-light type="ambient" color="#ffffff" intensity="0.55"></a-light>
-      <a-light type="directional" color="#fff5e6" intensity="0.45" position="2 6 4"></a-light>
-      <a-sky color="#b9e8ff"></a-sky>
+      <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
+      <a-light type="directional" color="#e8dcc8" intensity="0.55" position="3 10 6"></a-light>
+      <a-sky color="#1a2330"></a-sky>
       <a-entity id="world-root"></a-entity>
-      <a-player id="player" locomotion grabbing position="0 0 2"></a-player>
+      <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
     </a-scene>
 
     <script>
@@ -63,10 +56,7 @@
       function relaxPointerLockOnCamera(rootScene) {
         var cam = rootScene.querySelector('a-camera');
         if (!cam) return;
-        cam.setAttribute('look-controls', {
-          pointerLockEnabled: false,
-          touchEnabled: false
-        });
+        cam.setAttribute('look-controls', { pointerLockEnabled: false, touchEnabled: false });
       }
 
       var scene = document.getElementById('scene');
@@ -74,17 +64,43 @@
       var q = new URLSearchParams(location.search).get('seed');
       if (q != null) seed = parseInt(q, 10) || 1;
 
+      var GRID_W = 48;
+      var GRID_H = 40;
+
       scene.addEventListener(
         'loaded',
         function () {
           requestAnimationFrame(function () {
             requestAnimationFrame(function () {
               var root = document.getElementById('world-root');
-              var meta = window.generateWorld(root, seed);
-              if (meta && meta.spawnWorld) {
-                var sw = meta.spawnWorld;
-                document.getElementById('player').setAttribute('position', sw.x + ' 0 ' + sw.z);
+              /*
+                Union: BSP floor OR ridge-open. That can attach stray caverns; flood prune from the
+                BSP spawn keeps one connected play area.
+              */
+              var bsp = generateBspDungeon(seed, {
+                width: GRID_W,
+                height: GRID_H,
+                minLeafSize: 8,
+                maxDepth: 4
+              });
+              var ridge = WorldGenRidge.sampleRidgeGrid(GRID_W, GRID_H, seed, {
+                scale: 12,
+                octaves: 5,
+                threshold: 0.55
+              });
+              var tiles = WorldGenCombine.unionFloor(bsp.tiles, ridge.open);
+              var mk = bsp.markers && bsp.markers[0];
+              if (mk) {
+                tiles = WorldGenCombine.floodPruneToComponent(tiles, mk.x, mk.y);
               }
+              var markerTile = mk ? { x: mk.x, y: mk.y } : undefined;
+              var out = buildAgameTileWorld(root, tiles, { markerTile: markerTile, seed: seed });
+
+              document.getElementById('player').setAttribute(
+                'position',
+                out.spawnWorld.x + ' 0 ' + out.spawnWorld.z
+              );
+
               requestAnimationFrame(function () {
                 refreshRaycasters(scene);
                 setTimeout(function () {
