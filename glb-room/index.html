@@ -1,43 +1,143 @@
 <!DOCTYPE html>
+<!--
+  GLB ROOM EXAMPLE — learner map
+  ==============================
+  This page lives in glb-room/ and loads shared libraries from ../libs/ (same as the repo root
+  index.html). Serve the REPO ROOT with a static server (e.g. python3 -m http.server) and open
+  /glb-room/ — do NOT open this file as file:// or ../ paths break.
+
+  CRITICAL CHAIN (if you remove or reorder these, things break locally / offline):
+  1) AFRAME_CDN_ROOT + aframe-cdn-rewrite.js BEFORE aframe — rewrites hard-coded cdn.aframe.io URLs.
+  2) aframe-v1.3.0.min.js BEFORE a-game — defines AFRAME and <a-scene>.
+  3) Delete stock A-Frame "grabbable" BEFORE a-game — a-game registers its own; both together clash.
+  4) a-game.min.js — locomotion, grabbing, physics components, <a-player>.
+  5) physics="workerUrl: ../libs/a-game/cannonWorker.min.js" on <a-scene> — same-origin worker;
+     wrong/missing URL → physics dead or worker load fails.
+  6) room_maru.glb — the actual glTF binary (this folder). Missing file → empty room / load errors.
+-->
 <html lang="en">
   <head>
+    <!-- Standard document metadata; safe to tweak title. Charset required for sane text. -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GLB room (Maru)</title>
+    <!-- Empty favicon stops the browser requesting /favicon.ico (minor; safe to remove). -->
     <link rel="icon" href="data:," />
-    <!-- Project site: <base href="/REPO_NAME/" /> -->
+
+    <!--
+      GitHub Pages "project site" (URL like user.github.io/REPO/): uncomment and set base so every
+      relative URL (../libs/..., ./room_maru.glb) resolves under /REPO/. Without it on a subpath,
+      libs and GLB 404. For localhost at repo root, leave commented.
+      Edge case for deployment, not for file://.
+    -->
+    <!-- <base href="/REPO_NAME/" /> -->
+
+    <!--
+      AFRAME_CDN_ROOT + ../js/aframe-cdn-rewrite.js (CRITICAL for local / offline VR assets)
+      ---------------------------------------------------------------------------
+      A-Frame 1.3 embeds https://cdn.aframe.io/... for controller models etc. It does NOT read
+      this variable by itself. Our rewrite script patches XHR/fetch (and img src) so those URLs hit
+      ../libs/aframe-cdn/ instead. Remove rewrite OR root → VR may still work on desktop, but
+      headset/controller loads can hit the real internet or 404. Order: set root, then rewrite,
+      THEN aframe.min.js.
+    -->
     <script>
       window.AFRAME_CDN_ROOT = new URL('../libs/aframe-cdn/', document.baseURI).href;
     </script>
     <script src="../js/aframe-cdn-rewrite.js"></script>
+
+    <!-- Core A-Frame 1.3 bundle (THREE.js + components + <a-scene>). Required. -->
     <script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+
+    <!--
+      Remove A-Frame's built-in grabbable (CRITICAL before a-game)
+      ------------------------------------------------------------
+      A-Frame 1.3 ships a grabbable meant for other systems. a-game expects ITS grabbable. If you
+      skip this delete, grab / raycast / warnings can break. Must run after AFRAME exists, before
+      a-game script loads.
+    -->
     <script>
       if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
         delete AFRAME.components.grabbable;
       }
     </script>
+
+    <!-- a-game: physics, locomotion, grabbing, <a-player>, floor/wall tags, etc. Required. -->
     <script src="../libs/a-game/a-game.min.js"></script>
+
+    <!--
+      spawn-in-circle.js (needed because <a-player> uses spawn-in-circle below)
+      --------------------------------------------------------------------------
+      Registers the component that places the player on a random point on a circle. If you remove
+      the script, remove spawn-in-circle from <a-player> or the scene will error on init.
+    -->
     <script src="./spawn-in-circle.js"></script>
+
+    <!--
+      random-color.js (OPTIONAL for THIS page as written)
+      ----------------------------------------------------
+      Registers a "random-color" component. No element in this HTML uses random-color= right now,
+      so this script is only here for copy-paste (e.g. NAF-style avatars). Safe to remove script
+      tag AND file reference if you do not use the component — nothing else depends on it.
+    -->
     <script src="./random-color.js"></script>
   </head>
   <body>
+    <!--
+      Hidden checkbox (a-game / editor edge case)
+      -------------------------------------------
+      Some a-game paths read #save-position-from-vr for VR position save hooks. Unchecked = no-op.
+      Safe to remove ONLY if you do not rely on that feature; removing is unlikely to break basic
+      desktop/VR play, but keep it if you follow a-game docs that mention it.
+    -->
     <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
+
+    <!--
+      <a-scene> attributes (all explained here — HTML does not allow comments inside the tag)
+      ----------------------------------------------------------------------------------------
+      physics (CRITICAL): workerUrl MUST be a same-origin path to cannonWorker.min.js (not the
+        default CDN). Wrong/missing URL → worker load failure → no collision / grab physics.
+        ?v=... cache-busts after worker edits. gravity is earth-like; tweak for moon jumps.
+      loading-screen: optional UX — disables A-Frame's default loading overlay. Safe to remove.
+      renderer: optional — colorManagement + antialias help PBR/glTF. Safe to remove; scene still runs.
+    -->
     <a-scene
       id="scene"
       physics="workerUrl: ../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
       loading-screen="enabled: false"
       renderer="colorManagement: true; antialias: true"
     >
+      <!--
+        a-assets + a-asset-item: GLB preload
+        ------------------------------------
+        id="room" is referenced by gltf-model="#room". src is same-folder GLB (must exist).
+        You could point src at another path; broken path = model never appears.
+      -->
       <a-assets>
         <a-asset-item id="room" src="./room_maru.glb"></a-asset-item>
       </a-assets>
 
+      <!--
+        Lights (recommended for glTF PBR, not strictly required)
+        --------------------------------------------------------
+        Without lights, many materials look black/dim. You could use a single ambient or scene's
+        default; these values match a typical indoor preview. Safe to tune or simplify.
+      -->
       <a-light type="ambient" color="#ffffff" intensity="0.65"></a-light>
       <a-light type="directional" color="#fff5e6" intensity="0.5" position="3 8 4"></a-light>
 
+      <!-- Sky dome; cosmetic. Safe to remove (void background) or change color. -->
       <a-sky color="#ECECEC"></a-sky>
 
-      <!-- Physics floor (a-game locomotion); room GLB is additional static collision + visuals -->
+      <!--
+        Green floor box (important for a-game "floor" / locomotion, not the only collision)
+        -----------------------------------------------------------------------------------
+        a-game uses components like floor on surfaces you can stand on. The Maru GLB also has
+        floor on the mesh entity below. This large static box guarantees a simple ground collider
+        under the scaled model and matches the original MIMIC pattern. You could try removing it
+        ONLY if you trust the GLB's physics hull alone — risk: fall through or spawn issues.
+        body="type: static" = Cannon static body. floor = a-game tag for locomotion helpers.
+      -->
       <a-box
         position="0 0 0"
         material="color: #46aa46"
@@ -49,6 +149,14 @@
         floor
       ></a-box>
 
+      <!--
+        Room GLB (main visual + extra static collision)
+        ------------------------------------------------
+        scale 0.01: Sketchfab exports are often in cm; meters need shrink. Wrong scale = tiny/huge room.
+        body="type: static": whole room as one static collider (approximate; complex mesh → approx shape).
+        floor: marks walkable for a-game where appropriate. shadow cast: cosmetic.
+        If you remove gltf-model or asset, you only have the green box.
+      -->
       <a-entity
         gltf-model="#room"
         position="0 0.5 0"
@@ -59,10 +167,24 @@
         floor
       ></a-entity>
 
+      <!--
+        a-player (CRITICAL for this demo's controls)
+        ---------------------------------------------
+        Provided by a-game: camera, hands, locomotion, grab. grabbing + locomotion are core.
+        spawn-in-circle: needs spawn-in-circle.js loaded above. position 0 0 0 is the circle center
+        before the component nudges you. Remove spawn-in-circle attribute if you remove its script.
+      -->
       <a-player grabbing locomotion spawn-in-circle="radius: 2" position="0 0 0"></a-player>
     </a-scene>
 
     <script>
+      /*
+        Global unhandledrejection filter (UX / dev edge case, NOT required for scene logic)
+        ---------------------------------------------------------------------------------
+        a-game / look-controls can reject pointer-lock promises (iframe, unfocused tab, etc.).
+        This silences known noisy errors so the console stays readable. Safe to remove; you may see
+        harmless rejection warnings instead. Does not affect GLB load or physics.
+      */
       window.addEventListener('unhandledrejection', function (event) {
         var name = event.reason && event.reason.name;
         var msg = String((event.reason && event.reason.message) || event.reason || '');
@@ -71,6 +193,12 @@
         }
       });
 
+      /*
+        After scene load: relax pointer lock on camera (UX edge case)
+        ---------------------------------------------------------------
+        Disables pointer lock on desktop mouse look so embedded previews / strict environments
+        behave better. Not required for VR room presence; safe to remove if you want pointer lock.
+      */
       document.getElementById('scene').addEventListener(
         'loaded',
         function () {
