@@ -64,6 +64,12 @@
         Uses <code>js/world/noise-dungeon.js</code> + <code>js/world/bsp-dungeon.js</code>.
       </li>
       <li>
+        <a href="world-noise-tube-dungeon/">BSP noise tube dungeon</a> — same BSP graph and the same
+        noise displacement and grain texturing as the noise dungeon, but rooms are sphere shells and
+        corridors are open tubes (L-shaped segments). Uses <code>js/world/noise-capsule-dungeon.js</code>
+        (<code>NoiseTubeDungeon.build</code>) + <code>js/world/bsp-dungeon.js</code>.
+      </li>
+      <li>
         <a href="world-sdf-bsp-dungeon/">BSP smin cave (marching cubes)</a> — same BSP tile layout as the
         noise dungeon, but the rock volume is a <strong>smooth-min union</strong> of wall columns plus
         ground/ceiling caps, polygonised with <strong>marching cubes</strong>, then value noise
