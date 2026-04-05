@@ -206,7 +206,7 @@
           noiseScale: 0.4,
           octaves: 4,
           surfaceDisplacement: parseFloat(document.getElementById('surfDisp').value),
-          uvScale: 0.44,
+          uvScale: 2,
           voxelStep: parseFloat(document.getElementById('voxelStep').value),
           maxAxisSamples: 124,
           ceilingMode: 'dome',
@@ -216,12 +216,10 @@
           ceilingDomeFalloff: parseFloat(document.getElementById('domeFall').value),
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
           ceilingDetailScale: 0.1,
-          albedoMode: 'cobble',
-          grainStyle: 'cobble',
-          materialColor: 0x5c5957,
-          materialRoughness: 0.97,
-          materialMetalness: 0,
-          cobbleDisplacementMul: 1
+          albedoMode: 'luminance',
+          grainStyle: 'default',
+          materialRoughness: 0.95,
+          materialMetalness: 0
         });
 
         var player = document.getElementById('player');
