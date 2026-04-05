@@ -26,6 +26,7 @@
  *   ceilingThickness, trimHeight, trimDepth — only used when visualDetail === 'tierA'.
  *   displacement — default true with tierA; set false to skip displacementMap (saves shader cost).
  *   displacementScaleFloor / displacementScaleWall / displacementScaleCeiling — world-unit amplitudes.
+ *   textureTileMeters — approximate world size of one texture repeat (Tier A); default ~0.45 * cellSize.
  *
  * PUBLIC API
  * ----------
@@ -225,6 +226,77 @@
     return found;
   }
 
+  /**
+   * Scale default box UVs so maps tile in world space (~tileMeters per repeat on each face).
+   * Matches Three.js BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z (materialIndex 0–5).
+   * Clones geometry once so we do not mutate A-Frame’s shared buffer.
+   */
+  function ensureMeterTiledBoxUvs(mesh, width, height, depth, tileMeters) {
+    var geom = mesh.geometry;
+    if (!geom || !geom.attributes || !geom.attributes.uv || !geom.index) return;
+    if (geom.userData && geom.userData.wgTierAUvScaled) return;
+    var clone = geom.clone();
+    mesh.geometry = clone;
+
+    var uv = clone.attributes.uv;
+    var idx = clone.index;
+    var T = Math.max(0.04, tileMeters);
+    var w = Math.max(1e-6, width);
+    var h = Math.max(1e-6, height);
+    var d = Math.max(1e-6, depth);
+    var scales = [
+      { su: d / T, sv: h / T },
+      { su: d / T, sv: h / T },
+      { su: w / T, sv: d / T },
+      { su: w / T, sv: d / T },
+      { su: w / T, sv: h / T },
+      { su: w / T, sv: h / T }
+    ];
+    var uvArr = uv.array;
+    var ia = idx.array;
+    var groups = clone.groups;
+    if (groups && groups.length) {
+      for (var gi = 0; gi < groups.length; gi++) {
+        var gr = groups[gi];
+        var mi = gr.materialIndex | 0;
+        if (mi < 0 || mi > 5) mi = 0;
+        var sc = scales[mi];
+        var start = gr.start;
+        var count = gr.count;
+        var seen = {};
+        for (var i = 0; i < count; i++) {
+          var vi = ia[start + i];
+          if (seen[vi]) continue;
+          seen[vi] = 1;
+          var o = vi * 2;
+          uvArr[o] *= sc.su;
+          uvArr[o + 1] *= sc.sv;
+        }
+      }
+    }
+    uv.needsUpdate = true;
+    clone.userData.wgTierAUvScaled = 1;
+  }
+
+  function readBoxDimsFromEntity(el, mesh) {
+    var g = mesh && mesh.geometry;
+    var p = g && g.parameters;
+    if (p && p.width != null && p.height != null && p.depth != null) {
+      return { width: p.width, height: p.height, depth: p.depth };
+    }
+    function attr(name, def) {
+      var v = el.getAttribute(name);
+      if (v == null || v === '') return def;
+      var n = parseFloat(v);
+      return isNaN(n) ? def : n;
+    }
+    return {
+      width: attr('width', 1),
+      height: attr('height', 1),
+      depth: attr('depth', 1)
+    };
+  }
+
   /** A-Frame box geometry is capped at 20 segments per axis (see geometry box schema). */
   function applyTierABoxGeometry(el, width, height, depth, kind, cellSize) {
     var sw;
@@ -265,13 +337,9 @@
     var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.22;
     var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.26;
 
-    /* repeat < 1 → fewer, larger tiles on each face */
-    var repFloorU = 0.38;
-    var repFloorV = 0.38;
-    var repWallU = 0.34;
-    var repWallV = 0.48;
-    var repCeilU = 0.4;
-    var repCeilV = 0.4;
+    var cellSize = matOpts.cellSize != null ? matOpts.cellSize : 1;
+    var textureTileMeters =
+      matOpts.textureTileMeters != null ? matOpts.textureTileMeters : Math.max(0.12, cellSize * 0.45);
 
     var textureBundle = null;
     function ensureTextureBundle() {
@@ -281,15 +349,17 @@
       var wallSet = makeTierSurfaceTextures(THREE, outSize, (seed + 1) ^ 0x85a308d3, 'wall');
       var ceilSet = makeTierSurfaceTextures(THREE, outSize, (seed + 2) ^ 0x13198a2e, 'ceiling');
 
-      function setRep(s, u, v) {
+      /* World-space tiling is done via scaled UVs per mesh; keep texture repeat at 1. */
+      function setRepOne(s) {
         [s.albedo, s.roughness, s.displacement, s.normal].forEach(function (t) {
-          t.repeat.set(u, v);
+          t.repeat.set(1, 1);
+          t.offset.set(0, 0);
           t.needsUpdate = true;
         });
       }
-      setRep(floorSet, repFloorU, repFloorV);
-      setRep(wallSet, repWallU, repWallV);
-      setRep(ceilSet, repCeilU, repCeilV);
+      setRepOne(floorSet);
+      setRepOne(wallSet);
+      setRepOne(ceilSet);
 
       textureBundle = { floor: floorSet, wall: wallSet, ceiling: ceilSet };
       return textureBundle;
@@ -313,6 +383,9 @@
         var mesh = getEntityMesh(el);
         if (!mesh) continue;
         if (mesh.material && mesh.material.userData && mesh.material.userData.wgTierA) continue;
+
+        var dims = readBoxDimsFromEntity(el, mesh);
+        ensureMeterTiledBoxUvs(mesh, dims.width, dims.height, dims.depth, textureTileMeters);
 
         var set =
           kind === 'floor' ? b.floor : kind === 'ceiling' ? b.ceiling : b.wall;
@@ -539,10 +612,11 @@
    *   crateCount?: number,
    *   visualDetail?: 'basic' | 'tierA',
    *   displacement?: boolean,
-   *   displacementScaleFloor?: number,
-   *   displacementScaleWall?: number,
-   *   displacementScaleCeiling?: number
-   * }} [options]
+ *   displacementScaleFloor?: number,
+ *   displacementScaleWall?: number,
+ *   displacementScaleCeiling?: number,
+ *   textureTileMeters?: number
+ * }} [options]
    * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number, markerTile: {x:number,y:number}, goalTile?: {x:number,y:number} }}
    */
   function buildAgameTileWorld(rootEl, tiles, options) {
@@ -693,6 +767,8 @@
     if (tierA) {
       scheduleTierAMaterials(rootEl, {
         seed: seed,
+        cellSize: cellSize,
+        textureTileMeters: options.textureTileMeters,
         displacement: options.displacement !== false,
         displacementScaleFloor: options.displacementScaleFloor,
         displacementScaleWall: options.displacementScaleWall,
