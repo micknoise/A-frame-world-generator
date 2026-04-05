@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BSP smin cavern — dome ceiling & hover light</title>
+    <title>BSP smin cavern — domed ceiling & cobble</title>
     <link rel="icon" href="data:," />
     <script>
       window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
@@ -54,20 +54,21 @@
   <body>
     <div id="hud">
       <p class="ref">Flat ceiling variant: <a href="../world-sdf-bsp-dungeon/">world-sdf-bsp-dungeon</a></p>
-      <h2>Cavern dome + white rock</h2>
+      <h2>Cavern dome + cobblestone</h2>
       <label>Seed <input type="number" id="seed" value="1"></label>
       <label>Grid W <input type="number" id="gridW" value="40" min="16" max="72"></label>
       <label>Grid H <input type="number" id="gridH" value="34" min="16" max="72"></label>
-      <label>Dome lift <input type="range" id="domeAmp" min="1.2" max="5.5" step="0.1" value="3.2"><span id="domeAmpVal">3.2</span></label>
-      <label>Dome tightness <input type="range" id="domeFall" min="0.6" max="2.4" step="0.05" value="1.35"><span id="domeFallVal">1.35</span></label>
-      <label>Ceiling detail <input type="range" id="ceilDet" min="0" max="0.55" step="0.02" value="0.28"><span id="ceilDetVal">0.28</span></label>
+      <label>Dome lift <input type="range" id="domeAmp" min="1.5" max="6" step="0.1" value="4"><span id="domeAmpVal">4</span></label>
+      <label>Dome tightness <input type="range" id="domeFall" min="0.45" max="2.2" step="0.05" value="1.05"><span id="domeFallVal">1.05</span></label>
+      <label>Ceiling detail <input type="range" id="ceilDet" min="0" max="0.55" step="0.02" value="0.32"><span id="ceilDetVal">0.32</span></label>
       <label>Smooth union (× cell) <input type="range" id="smoothK" min="0.15" max="0.85" step="0.02" value="0.42"><span id="smoothKVal">0.42</span></label>
       <label>Voxel step <input type="range" id="voxelStep" min="0.38" max="0.85" step="0.02" value="0.52"><span id="voxelStepVal">0.52</span></label>
-      <label>Surface bump <input type="range" id="surfDisp" min="0" max="0.22" step="0.01" value="0.09"><span id="surfDispVal">0.09</span></label>
+      <label>Surface bump <input type="range" id="surfDisp" min="0" max="0.24" step="0.01" value="0.16"><span id="surfDispVal">0.16</span></label>
       <button id="generateBtn">&#9654; Regenerate</button>
       <div class="hint">
-        Ceiling height follows a smooth bump over the map (Gaussian in normalised XZ) plus fBm detail.
-        Scene is almost unlit except a cool white point lamp that orbits slightly above your position.
+        Ceiling is a heightfield (Gaussian dome + noise), meshed with a hard cap so it actually lifts
+        above the old flat wall-top. Stone uses cobble-style vertex tones and a blotchy grain map —
+        dim scene, single moving lamp above you.
       </div>
     </div>
 
@@ -81,7 +82,7 @@
       loading-screen="enabled: false"
     >
       <a-assets></a-assets>
-      <a-light type="ambient" color="#c8d8f0" intensity="0.032"></a-light>
+      <a-light type="ambient" color="#8898b0" intensity="0.018"></a-light>
       <a-sky color="#020208"></a-sky>
 
       <a-entity id="world-root"></a-entity>
@@ -132,7 +133,7 @@
         rig = document.createElement('a-entity');
         rig.id = 'cavern-hover-light';
         var bulb = document.createElement('a-entity');
-        bulb.setAttribute('light', 'type: point; color: #f7fbff; intensity: 4.5; distance: 38; decay: 2');
+        bulb.setAttribute('light', 'type: point; color: #e2e6ed; intensity: 2.65; distance: 32; decay: 2');
         bulb.setAttribute('position', '0 3.55 0');
         rig.appendChild(bulb);
         player.appendChild(rig);
@@ -192,20 +193,23 @@
           wallHeight: WH,
           smoothUnion: CS * kMul,
           smoothCap: CS * Math.min(0.28, kMul * 0.55),
-          noiseScale: 0.38,
-          octaves: 4,
+          noiseScale: 0.54,
+          octaves: 5,
           surfaceDisplacement: parseFloat(document.getElementById('surfDisp').value),
-          uvScale: 2,
+          uvScale: 0.82,
           voxelStep: parseFloat(document.getElementById('voxelStep').value),
           maxAxisSamples: 124,
           ceilingMode: 'dome',
           ceilingDomeAmplitude: parseFloat(document.getElementById('domeAmp').value),
           ceilingDomeFalloff: parseFloat(document.getElementById('domeFall').value),
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
-          ceilingDetailScale: 0.09,
-          albedoMode: 'white',
-          grainNeutral: true,
-          materialColor: 0xffffff
+          ceilingDetailScale: 0.1,
+          albedoMode: 'cobble',
+          grainStyle: 'cobble',
+          materialColor: 0x5c5957,
+          materialRoughness: 0.97,
+          materialMetalness: 0,
+          cobbleDisplacementMul: 1.18
         });
 
         var player = document.getElementById('player');

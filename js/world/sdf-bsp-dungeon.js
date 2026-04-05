@@ -12,9 +12,13 @@
  * Optional (defaults match original flat ceiling + greyscale vertex tint):
  *   ceilingMode: 'flat' | 'dome' — dome raises ceiling toward map centre (cavern roof).
  *   ceilingDomeAmplitude, ceilingDomeFalloff, ceilingDetailAmplitude, ceilingDetailScale
- *   albedoMode: 'luminance' | 'white' — white keeps vertex colour 1,1,1 for neutral rock.
- *   grainNeutral: true — tight grey grain (~248–255) so albedo stays white.
- *   materialColor: THREE.Color or hex number for MeshStandardMaterial.color
+ *   albedoMode: 'luminance' | 'white' | 'cobble' — cobble = multi-scale fBm vertex tones (grey stone).
+ *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = blotchy multi-freq grain for masonry.
+ *   grainNeutral: true — shorthand for grainStyle 'neutral' if grainStyle omitted.
+ *   materialColor, materialRoughness, materialMetalness — PBR tweaks.
+ *
+ * Ceiling heightfield uses Math.min (hard cap) so a domed ceiling is not flattened by smin
+ * against wall-column tops at y = wallHeight.
  *
  * Depends on window.MC_EDGE_TABLE and window.MC_TRI_TABLE (mc-tables.js).
  */
@@ -92,25 +96,34 @@
     return sum / maxAmp;
   };
 
-  function generateGrainTexture(seed, size, neutral) {
+  function generateGrainTexture(seed, size, grainStyle) {
     size = size || 256;
+    var style = grainStyle || 'default';
     var grainNoise = new ValueNoise(seed ^ 0xBEEF);
     var canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;
     var ctx = canvas.getContext('2d');
     var imgData = ctx.createImageData(size, size);
     var data = imgData.data;
-    var py, px, u, v, grain, grey, off;
+    var py, px, u, v, g0, g1, g2, mix, grey, off;
     for (py = 0; py < size; py++) {
       for (px = 0; px < size; px++) {
         u = px / size;
         v = py / size;
-        grain = grainNoise.fbm(u * 24, v * 24, 3);
-        if (neutral) {
-          grey = Math.floor(248 + grain * 7);
+        if (style === 'cobble') {
+          g0 = grainNoise.fbm(u * 6 + 1.7, v * 6 + 0.3, 4);
+          g1 = grainNoise.fbm(u * 18 + 4.2, v * 18 + 2.1, 3);
+          g2 = grainNoise.fbm(u * 42 + 0.8, v * 42 + 3.4, 2);
+          mix = g0 * 0.45 + g1 * 0.35 + g2 * 0.2;
+          grey = Math.floor(72 + mix * 105);
+          grey = Math.max(58, Math.min(188, grey));
+        } else if (style === 'neutral') {
+          g0 = grainNoise.fbm(u * 24, v * 24, 3);
+          grey = Math.floor(248 + g0 * 7);
           grey = Math.max(245, Math.min(255, grey));
         } else {
-          grey = Math.floor(200 + grain * 55);
+          g0 = grainNoise.fbm(u * 24, v * 24, 3);
+          grey = Math.floor(200 + g0 * 55);
           grey = Math.max(180, Math.min(255, grey));
         }
         off = (py * size + px) * 4;
@@ -177,7 +190,8 @@
       }
       d = smin(d, py, kCap);
       var cy = mode === 'flat' ? WH : ceilingY(px, pz);
-      d = smin(d, cy - py, kCap);
+      /* Hard ceiling cut: smin with wall tops pins the iso-surface near y = WH and hides domes. */
+      d = Math.min(d, cy - py);
       return d;
     };
   }
@@ -275,7 +289,7 @@
     return positions;
   }
 
-  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode) {
+  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode, cobbleDispMul) {
     var triCount = positions.length / 9;
     var vertCount = triCount * 3;
     var pos = new Float32Array(vertCount * 3);
@@ -297,7 +311,8 @@
         n1 = noise.fbm(px * nScale + 17, pz * nScale + 23, nOct);
         n2 = noise.fbm(py * nScale * 1.1 + 41, px * nScale + 11, nOct);
         lum = (n1 + n2) * 0.5;
-        disp = (lum - 0.5) * 2 * dispAmp;
+        var dispMul = albedoMode === 'cobble' ? (cobbleDispMul || 1.12) : 1;
+        disp = (lum - 0.5) * 2 * dispAmp * dispMul;
 
         px += g.x * disp;
         py += g.y * disp;
@@ -311,6 +326,16 @@
           colors[vidx * 3] = 1;
           colors[vidx * 3 + 1] = 1;
           colors[vidx * 3 + 2] = 1;
+        } else if (albedoMode === 'cobble') {
+          var n3 = noise.fbm(px * nScale * 0.42 + 3.1, pz * nScale * 0.42 + 8.4, Math.min(5, nOct + 1));
+          var n4 = noise.fbm(px * nScale * 1.9 + 12, pz * nScale * 1.9 - 4, nOct);
+          var stone = n1 * 0.28 + n2 * 0.28 + n3 * 0.32 + n4 * 0.12;
+          lum = 0.36 + stone * 0.44;
+          if (lum < 0.32) lum = 0.32;
+          if (lum > 0.82) lum = 0.82;
+          colors[vidx * 3] = lum;
+          colors[vidx * 3 + 1] = lum;
+          colors[vidx * 3 + 2] = lum;
         } else {
           colors[vidx * 3] = lum;
           colors[vidx * 3 + 1] = lum;
@@ -391,8 +416,13 @@
     var ceilDetAmp = options.ceilingDetailAmplitude != null ? options.ceilingDetailAmplitude : 0;
     var ceilDetScale = options.ceilingDetailScale != null ? options.ceilingDetailScale : 0.1;
     var albedoMode = options.albedoMode != null ? options.albedoMode : 'luminance';
-    var grainNeutral = !!options.grainNeutral;
+    var grainStyleOpt = options.grainStyle;
+    if (!grainStyleOpt && options.grainNeutral) grainStyleOpt = 'neutral';
+    var grainStyle = grainStyleOpt || 'default';
     var matColorOpt = options.materialColor;
+    var matRough = options.materialRoughness != null ? options.materialRoughness : 0.88;
+    var matMetal = options.materialMetalness != null ? options.materialMetalness : 0.03;
+    var cobbleDispMul = options.cobbleDisplacementMul != null ? options.cobbleDisplacementMul : 1.14;
 
     var H = tiles.length;
     var W = tiles[0].length;
@@ -404,8 +434,8 @@
       mode: ceilingMode,
       worldCX: worldW * 0.5,
       worldCZ: worldD * 0.5,
-      invRx: 1 / Math.max(worldW * 0.45, 0.001),
-      invRz: 1 / Math.max(worldD * 0.45, 0.001),
+      invRx: 1 / Math.max(worldW * (ceilingMode === 'dome' ? 0.38 : 0.45), 0.001),
+      invRz: 1 / Math.max(worldD * (ceilingMode === 'dome' ? 0.38 : 0.45), 0.001),
       domeAmp: domeAmp,
       domeFall: domeFall,
       ceilNoise: ceilDetAmp > 0 ? ceilNoisePre : null,
@@ -460,10 +490,10 @@
     if (soup.length < 9) {
       geo = new THREE.BoxGeometry(CS * 2, 0.2, CS * 2);
     } else {
-      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode);
+      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode, cobbleDispMul);
     }
 
-    var grainCanvas = generateGrainTexture(seed, 256, grainNeutral);
+    var grainCanvas = generateGrainTexture(seed, 256, grainStyle);
     var grainTex = new THREE.CanvasTexture(grainCanvas);
     grainTex.wrapS = THREE.RepeatWrapping;
     grainTex.wrapT = THREE.RepeatWrapping;
@@ -476,8 +506,8 @@
       map: grainTex,
       vertexColors: true,
       flatShading: false,
-      roughness: 0.88,
-      metalness: 0.03,
+      roughness: matRough,
+      metalness: matMetal,
       side: THREE.FrontSide
     };
     if (matColorOpt != null) {
