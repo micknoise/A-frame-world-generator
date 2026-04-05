@@ -82,7 +82,7 @@
       loading-screen="enabled: false"
     >
       <a-assets></a-assets>
-      <a-light type="ambient" color="#8898b0" intensity="0.018"></a-light>
+      <a-light type="ambient" color="#060504" intensity="0.03"></a-light>
       <a-sky color="#020208"></a-sky>
 
       <a-entity id="world-root"></a-entity>
@@ -127,32 +127,41 @@
       var animStarted = false;
 
       function ensureHoverLight() {
+        var existing = document.getElementById('cavern-torch');
+        if (existing) return existing;
         var player = document.getElementById('player');
-        var rig = document.getElementById('cavern-hover-light');
-        if (rig) return rig;
-        rig = document.createElement('a-entity');
-        rig.id = 'cavern-hover-light';
-        var bulb = document.createElement('a-entity');
-        bulb.setAttribute('light', 'type: point; color: #e2e6ed; intensity: 2.65; distance: 32; decay: 2');
-        bulb.setAttribute('position', '0 3.55 0');
-        rig.appendChild(bulb);
-        player.appendChild(rig);
-        return rig;
+        var cam = player.querySelector('[camera], a-camera');
+        var target = cam || player;
+        var torch = document.createElement('a-entity');
+        torch.id = 'cavern-torch';
+        torch.setAttribute('light', 'type: point; color: #c4781a; intensity: 1.4; distance: 28; decay: 2');
+        target.appendChild(torch);
+        return torch;
       }
 
       function startLightMotion() {
         if (animStarted) return;
         animStarted = true;
-        var rig = ensureHoverLight();
-        var bulb = rig.children[0];
+        ensureHoverLight();
         function frame(now) {
           var t = now * 0.001;
-          var r = 0.4;
-          bulb.setAttribute('position', {
-            x: Math.sin(t * 0.88) * r,
-            y: 3.55 + Math.sin(t * 1.2) * 0.14,
-            z: Math.cos(t * 0.62) * r
-          });
+          var torch = document.getElementById('cavern-torch');
+          if (!torch || !torch.object3D) { requestAnimationFrame(frame); return; }
+          /* Torch flicker: sum of odd-frequency sinusoids */
+          var flicker =
+            Math.sin(t * 7.3)  * 0.10 +
+            Math.sin(t * 13.7) * 0.06 +
+            Math.sin(t * 23.1) * 0.04 +
+            Math.sin(t * 47.3) * 0.02;
+          /* Slight positional sway */
+          var sx = Math.sin(t * 1.8) * 0.06 + Math.sin(t * 4.7) * 0.03;
+          var sy = Math.sin(t * 2.3) * 0.05;
+          var sz = Math.sin(t * 1.5) * 0.06 + Math.sin(t * 5.1) * 0.02;
+          var lightComp = torch.components && torch.components.light;
+          if (lightComp && lightComp.light) {
+            lightComp.light.intensity = Math.max(0.4, 1.4 * (1 + flicker));
+          }
+          torch.object3D.position.set(sx, sy, sz);
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
