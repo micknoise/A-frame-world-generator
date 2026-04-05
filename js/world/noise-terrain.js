@@ -10,7 +10,11 @@
  *
  * Public API (attached to window):
  *   NoiseTerrain.generate(params)  → { positions, colors, normals, indices, … }
- *   NoiseTerrain.build(scene, params) → builds THREE meshes into scene.object3D
+ *   NoiseTerrain.build(scene, params) → terrain + ocean meshes.
+ *   scene may be:
+ *     { object3D } — legacy: both meshes under the same group (fly demos).
+ *     { terrainRoot, oceanRoot } — terrain under terrainRoot; ocean under oceanRoot.
+ *       Put terrain under an <a-entity floor=""> so a-game locomotion raycasts hit the mesh.
  */
 (function () {
   'use strict';
@@ -242,11 +246,47 @@
 
   // ── Build into an A-Frame scene ─────────────────────────────────────────────
 
+  function disposeSubtree(obj) {
+    obj.traverse(function (o) {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
+  }
+
+  function removeTaggedChildren(root, tagTerrain, tagOcean) {
+    var c;
+    var ch;
+    var u;
+    for (c = root.children.length - 1; c >= 0; c--) {
+      ch = root.children[c];
+      u = ch.userData || {};
+      if ((tagTerrain && u.wgNoiseTerrain) || (tagOcean && u.wgNoiseOcean)) {
+        disposeSubtree(ch);
+        root.remove(ch);
+      }
+    }
+  }
+
   function build(scene, params) {
     var THREE = AFRAME.THREE;
     var data = generate(params);
 
-    // Terrain mesh
+    var terrainRoot;
+    var oceanRoot;
+    if (scene.terrainRoot) {
+      terrainRoot = scene.terrainRoot;
+      oceanRoot = scene.oceanRoot != null ? scene.oceanRoot : terrainRoot;
+    } else {
+      terrainRoot = scene.object3D;
+      oceanRoot = terrainRoot;
+    }
+
+    removeTaggedChildren(terrainRoot, true, false);
+    removeTaggedChildren(oceanRoot, false, true);
+
     var geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
     geo.setAttribute('color',    new THREE.BufferAttribute(data.colors, 3));
@@ -262,9 +302,9 @@
     });
 
     var terrainMesh = new THREE.Mesh(geo, mat);
-    scene.object3D.add(terrainMesh);
+    terrainMesh.userData.wgNoiseTerrain = 1;
+    terrainRoot.add(terrainMesh);
 
-    // Ocean plane
     var oceanSize = data.worldScale * 1.2;
     var oceanGeo = new THREE.PlaneGeometry(oceanSize, oceanSize, 1, 1);
     oceanGeo.rotateX(-Math.PI / 2);
@@ -277,8 +317,9 @@
       side: THREE.DoubleSide
     });
     var oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+    oceanMesh.userData.wgNoiseOcean = 1;
     oceanMesh.position.y = data.waterLevelY + 0.03;
-    scene.object3D.add(oceanMesh);
+    oceanRoot.add(oceanMesh);
 
     return data;
   }

@@ -82,7 +82,7 @@
       <label>Water Level <input type="range" id="waterLevel" min="0" max="60" step="1" value="30"><span id="waterLevelVal">30%</span></label>
       <label>Island Falloff <input type="range" id="falloff" min="0" max="100" step="1" value="50"><span id="falloffVal">50%</span></label>
       <button id="generateBtn">&#9654; Generate Terrain</button>
-      <div class="hint">Locomotion uses a flat collider at sea level (islands are visual only).</div>
+      <div class="hint">Terrain mesh is under <code>floor</code> so a-game locomotion raycasts onto the surface (Cannon has no mesh collider).</div>
     </div>
 
     <div id="legend">
@@ -110,19 +110,10 @@
       <a-light type="ambient" color="#BBD2E0" intensity="0.5"></a-light>
       <a-light type="directional" color="#FFF5E0" intensity="1.05" position="1 2 0.6"></a-light>
 
-      <a-entity id="world-root"></a-entity>
-
-      <!-- Invisible sea-level floor for a-game locomotion / physics (mesh terrain has no Cannon trimesh). -->
-      <a-box
-        id="walk-slab"
-        floor=""
-        width="260"
-        height="0.5"
-        depth="260"
-        material="opacity: 0; transparent: true"
-        body="type: static"
-        position="0 -10 0"
-      ></a-box>
+      <a-entity id="world-root">
+        <!-- floor: a-game locomotion raycaster targets [floor]; mesh lives under this entity. -->
+        <a-entity id="terrain-holder" floor=""></a-entity>
+      </a-entity>
 
       <a-player id="player" locomotion grabbing position="0 20 0"></a-player>
     </a-scene>
@@ -178,36 +169,19 @@
       if (qs != null) document.getElementById('seed').value = parseInt(qs, 10) || 42;
 
       var scene = document.getElementById('scene');
-      var terrainGroup = null;
 
       function rebuildTerrain() {
         var worldRoot = document.getElementById('world-root');
+        var holder = document.getElementById('terrain-holder');
         var params = readParams();
-        var pad = params.worldScale * 0.15;
-        var slabSize = params.worldScale + pad * 2;
 
-        if (terrainGroup) {
-          worldRoot.object3D.remove(terrainGroup);
-          terrainGroup.traverse(function (obj) {
-            if (obj.geometry) obj.geometry.dispose();
-            if (obj.material) {
-              if (obj.material.map) obj.material.map.dispose();
-              obj.material.dispose();
-            }
-          });
-        }
-
-        terrainGroup = new AFRAME.THREE.Group();
-        worldRoot.object3D.add(terrainGroup);
-
-        var data = NoiseTerrain.build({ object3D: terrainGroup }, params);
-
-        var halfThick = 0.25;
-        var slabY = data.waterLevelY - halfThick;
-        var walk = document.getElementById('walk-slab');
-        walk.setAttribute('width', slabSize);
-        walk.setAttribute('depth', slabSize);
-        walk.setAttribute('position', { x: 0, y: slabY, z: 0 });
+        var data = NoiseTerrain.build(
+          {
+            terrainRoot: holder.object3D,
+            oceanRoot: worldRoot.object3D
+          },
+          params
+        );
 
         var spawnY = Math.max(data.waterLevelY + 1.8, data.centerY + 2.2);
         document.getElementById('player').setAttribute('position', {
