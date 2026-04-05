@@ -21,7 +21,7 @@
  * OPTIONS
  * -------
  *   visualDetail: 'basic' | 'tierA' (default 'tierA') — Tier A adds ceiling, trims, MeshStandardMaterial
- *     with repeating canvas noise (roughness/detail) after a short rAF delay once meshes exist.
+ *     with world-space UV tiling (uniform meters/repeat, mirrored texture wrap) after meshes exist.
  *   goalTile: { x, y } — floor tile for a visible “exit” pillar (no floor/wall tag; cosmetic).
  *   ceilingThickness, trimHeight, trimDepth — only used when visualDetail === 'tierA'.
  *   displacement — default true with tierA; set false to skip displacementMap (saves shader cost).
@@ -187,7 +187,7 @@
       var ctx = canvas.getContext('2d');
       ctx.putImageData(new ImageData(data, outSize, outSize), 0, 0);
       var tex = new THREE.CanvasTexture(canvas);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.wrapS = tex.wrapT = THREE.MirroredRepeatWrapping;
       tex.anisotropy = 8;
       if (
         THREE.SRGBColorSpace != null &&
@@ -227,74 +227,66 @@
   }
 
   /**
-   * Scale default box UVs so maps tile in world space (~tileMeters per repeat on each face).
-   * Matches Three.js BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z (materialIndex 0–5).
-   * Clones geometry once so we do not mutate A-Frame’s shared buffer.
+   * World-space planar UVs: one pattern tile every `tileMeters` along world X / Y / Z so all
+   * surfaces (including merged floor strips) share uniform scale and line up across chunk seams.
+   * Horizontal faces use (world X, world Z); ±X walls use (Z, Y); ±Z walls use (X, Y).
+   * Clones geometry once; recomputes tangents so normal maps match the new UV gradients.
    */
-  function ensureMeterTiledBoxUvs(mesh, width, height, depth, tileMeters) {
+  function ensureMeterTiledBoxUvs(mesh, THREE, tileMeters) {
     var geom = mesh.geometry;
-    if (!geom || !geom.attributes || !geom.attributes.uv || !geom.index) return;
+    if (!geom || !geom.attributes || !geom.attributes.uv) return;
+    if (!geom.attributes.position || !geom.attributes.normal) return;
     if (geom.userData && geom.userData.wgTierAUvScaled) return;
+
+    mesh.updateMatrixWorld(true);
+
     var clone = geom.clone();
     mesh.geometry = clone;
 
+    var pos = clone.attributes.position;
+    var norm = clone.attributes.normal;
     var uv = clone.attributes.uv;
-    var idx = clone.index;
     var T = Math.max(0.04, tileMeters);
-    var w = Math.max(1e-6, width);
-    var h = Math.max(1e-6, height);
-    var d = Math.max(1e-6, depth);
-    var scales = [
-      { su: d / T, sv: h / T },
-      { su: d / T, sv: h / T },
-      { su: w / T, sv: d / T },
-      { su: w / T, sv: d / T },
-      { su: w / T, sv: h / T },
-      { su: w / T, sv: h / T }
-    ];
-    var uvArr = uv.array;
-    var ia = idx.array;
-    var groups = clone.groups;
-    if (groups && groups.length) {
-      for (var gi = 0; gi < groups.length; gi++) {
-        var gr = groups[gi];
-        var mi = gr.materialIndex | 0;
-        if (mi < 0 || mi > 5) mi = 0;
-        var sc = scales[mi];
-        var start = gr.start;
-        var count = gr.count;
-        var seen = {};
-        for (var i = 0; i < count; i++) {
-          var vi = ia[start + i];
-          if (seen[vi]) continue;
-          seen[vi] = 1;
-          var o = vi * 2;
-          uvArr[o] *= sc.su;
-          uvArr[o + 1] *= sc.sv;
-        }
-      }
-    }
-    uv.needsUpdate = true;
-    clone.userData.wgTierAUvScaled = 1;
-  }
+    var invT = 1 / T;
 
-  function readBoxDimsFromEntity(el, mesh) {
-    var g = mesh && mesh.geometry;
-    var p = g && g.parameters;
-    if (p && p.width != null && p.height != null && p.depth != null) {
-      return { width: p.width, height: p.height, depth: p.depth };
+    var wp = new THREE.Vector3();
+    var wn = new THREE.Vector3();
+    var pa = pos.array;
+    var na = norm.array;
+    var uva = uv.array;
+    var vc = pos.count;
+    var i;
+    for (i = 0; i < vc; i++) {
+      wp.set(pa[i * 3], pa[i * 3 + 1], pa[i * 3 + 2]).applyMatrix4(mesh.matrixWorld);
+      wn.set(na[i * 3], na[i * 3 + 1], na[i * 3 + 2]).transformDirection(mesh.matrixWorld);
+
+      var ax = Math.abs(wn.x);
+      var ay = Math.abs(wn.y);
+      var az = Math.abs(wn.z);
+      var u;
+      var vv;
+
+      if (ay >= ax && ay >= az) {
+        u = wp.x * invT;
+        vv = wp.z * invT;
+      } else if (ax >= az) {
+        u = wp.z * invT;
+        vv = wp.y * invT;
+      } else {
+        u = wp.x * invT;
+        vv = wp.y * invT;
+      }
+
+      uva[i * 2] = u;
+      uva[i * 2 + 1] = vv;
     }
-    function attr(name, def) {
-      var v = el.getAttribute(name);
-      if (v == null || v === '') return def;
-      var n = parseFloat(v);
-      return isNaN(n) ? def : n;
+
+    uv.needsUpdate = true;
+    if (clone.index && typeof clone.computeTangents === 'function') {
+      if (clone.attributes.tangent) clone.deleteAttribute('tangent');
+      clone.computeTangents();
     }
-    return {
-      width: attr('width', 1),
-      height: attr('height', 1),
-      depth: attr('depth', 1)
-    };
+    clone.userData.wgTierAUvScaled = 1;
   }
 
   /** A-Frame box geometry is capped at 20 segments per axis (see geometry box schema). */
@@ -349,7 +341,7 @@
       var wallSet = makeTierSurfaceTextures(THREE, outSize, (seed + 1) ^ 0x85a308d3, 'wall');
       var ceilSet = makeTierSurfaceTextures(THREE, outSize, (seed + 2) ^ 0x13198a2e, 'ceiling');
 
-      /* World-space tiling is done via scaled UVs per mesh; keep texture repeat at 1. */
+      /* Tiling is in UVs (world meters); repeat 1. Mirrored wrap is set on each texture. */
       function setRepOne(s) {
         [s.albedo, s.roughness, s.displacement, s.normal].forEach(function (t) {
           t.repeat.set(1, 1);
@@ -384,8 +376,7 @@
         if (!mesh) continue;
         if (mesh.material && mesh.material.userData && mesh.material.userData.wgTierA) continue;
 
-        var dims = readBoxDimsFromEntity(el, mesh);
-        ensureMeterTiledBoxUvs(mesh, dims.width, dims.height, dims.depth, textureTileMeters);
+        ensureMeterTiledBoxUvs(mesh, THREE, textureTileMeters);
 
         var set =
           kind === 'floor' ? b.floor : kind === 'ceiling' ? b.ceiling : b.wall;
