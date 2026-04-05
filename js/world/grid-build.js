@@ -58,37 +58,8 @@
     return '#' + n.toString(16).padStart(6, '0');
   }
 
-  /** Canvas grayscale noise for MeshStandardMaterial map + roughnessMap (Tier A). */
-  function makeNoiseCanvasTexture(THREE, size, seed, contrast) {
-    contrast = contrast == null ? 0.75 : contrast;
+  function smoothHeightGrid(seed, n) {
     var rng = mulberry32(seed >>> 0);
-    var canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size;
-    var ctx = canvas.getContext('2d');
-    var img = ctx.createImageData(size, size);
-    var d = img.data;
-    for (var i = 0; i < d.length; i += 4) {
-      var t = rng();
-      var v = Math.floor(255 * (0.35 + contrast * t * 0.55));
-      d[i] = d[i + 1] = d[i + 2] = v;
-      d[i + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-    var tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = 8;
-    tex.needsUpdate = true;
-    return tex;
-  }
-
-  /**
-   * Low-frequency blurred heightfield for displacementMap (avoids harsh spikes on subdivided boxes).
-   * Pixel values are centered on 128 so (sample * displacementScale + bias) with bias = -0.5*scale
-   * keeps the surface near its original shape while allowing symmetric push/pull.
-   */
-  function makeDisplacementCanvasTexture(THREE, outSize, seed) {
-    var rng = mulberry32(seed >>> 0);
-    var n = 36;
     var g = [];
     for (var j = 0; j < n; j++) {
       g[j] = [];
@@ -111,41 +82,133 @@
         b[y][x] = s / c;
       }
     }
-    outSize = outSize || 128;
-    var canvas = document.createElement('canvas');
-    canvas.width = canvas.height = outSize;
-    var ctx = canvas.getContext('2d');
-    var img = ctx.createImageData(outSize, outSize);
-    var data = img.data;
-    for (var py = 0; py < outSize; py++) {
-      for (var px = 0; px < outSize; px++) {
-        var fx = (px / (outSize - 1)) * (n - 1);
-        var fy = (py / (outSize - 1)) * (n - 1);
-        var x0 = Math.floor(fx);
-        var y0 = Math.floor(fy);
-        var tx = fx - x0;
-        var ty = fy - y0;
-        var x1 = Math.min(n - 1, x0 + 1);
-        var y1 = Math.min(n - 1, y0 + 1);
-        var v00 = b[y0][x0];
-        var v10 = b[y0][x1];
-        var v01 = b[y1][x0];
-        var v11 = b[y1][x1];
-        var v = v00 * (1 - tx) * (1 - ty) + v10 * tx * (1 - ty) + v01 * (1 - tx) * ty + v11 * tx * ty;
-        var byte = Math.floor(128 + (v - 0.5) * 118);
-        if (byte < 8) byte = 8;
-        if (byte > 247) byte = 247;
-        var idx = (py * outSize + px) * 4;
-        data[idx] = data[idx + 1] = data[idx + 2] = byte;
-        data[idx + 3] = 255;
+    return b;
+  }
+
+  function sampleHeightBilinear(b, n, fx, fy) {
+    var x0 = Math.floor(fx);
+    var y0 = Math.floor(fy);
+    var tx = fx - x0;
+    var ty = fy - y0;
+    var x1 = Math.min(n - 1, x0 + 1);
+    var y1 = Math.min(n - 1, y0 + 1);
+    var v00 = b[y0][x0];
+    var v10 = b[y0][x1];
+    var v01 = b[y1][x0];
+    var v11 = b[y1][x1];
+    return v00 * (1 - tx) * (1 - ty) + v10 * tx * (1 - ty) + v01 * (1 - tx) * ty + v11 * tx * ty;
+  }
+
+  /**
+   * One coherent height field → RGB albedo (tinted), grey roughness, displacement, tangent normals.
+   * Reads well under scene lights; normalMap gives visible relief even when displacement is subtle.
+   */
+  function makeTierSurfaceTextures(THREE, outSize, seed, surfaceKind) {
+    var n = 42;
+    var hGrid = smoothHeightGrid(seed, n);
+    var tint =
+      surfaceKind === 'floor'
+        ? { dr: 88, dg: 108, db: 82, lr: 168, lg: 188, lb: 148 }
+        : surfaceKind === 'ceiling'
+          ? { dr: 118, dg: 132, db: 158, lr: 208, lg: 218, lb: 235 }
+          : { dr: 138, dg: 148, db: 162, lr: 205, lg: 212, lb: 222 };
+
+    var H = new Float32Array(outSize * outSize);
+    var px;
+    var py;
+    for (py = 0; py < outSize; py++) {
+      for (px = 0; px < outSize; px++) {
+        var fx = (px / Math.max(1, outSize - 1)) * (n - 1);
+        var fy = (py / Math.max(1, outSize - 1)) * (n - 1);
+        var hBase = sampleHeightBilinear(hGrid, n, fx, fy);
+        var fxp = (fx * 3.15) % (n - 1);
+        var fyp = (fy * 3.15) % (n - 1);
+        if (fxp < 0) fxp += n - 1;
+        if (fyp < 0) fyp += n - 1;
+        var hDet = sampleHeightBilinear(hGrid, n, fxp, fyp);
+        H[py * outSize + px] = hBase * 0.7 + hDet * 0.3;
       }
     }
-    ctx.putImageData(img, 0, 0);
-    var tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = 8;
-    tex.needsUpdate = true;
-    return tex;
+
+    var albedoData = new Uint8ClampedArray(outSize * outSize * 4);
+    var roughData = new Uint8ClampedArray(outSize * outSize * 4);
+    var dispData = new Uint8ClampedArray(outSize * outSize * 4);
+    var normData = new Uint8ClampedArray(outSize * outSize * 4);
+    var normalStrength = 22;
+
+    for (py = 0; py < outSize; py++) {
+      for (px = 0; px < outSize; px++) {
+        var xm = Math.max(0, px - 1);
+        var xp = Math.min(outSize - 1, px + 1);
+        var ym = Math.max(0, py - 1);
+        var yp = Math.min(outSize - 1, py + 1);
+        var idx = py * outSize + px;
+        var h0 = H[idx];
+        var hl = H[py * outSize + xm];
+        var hr = H[py * outSize + xp];
+        var hu = H[ym * outSize + px];
+        var hd = H[yp * outSize + px];
+        var dx = (hr - hl) * normalStrength;
+        var dy = (hd - hu) * normalStrength;
+        var nx = -dx;
+        var ny = -dy;
+        var nz = 1;
+        var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        nx /= len;
+        ny /= len;
+        nz /= len;
+        var ar = Math.floor(tint.dr + (tint.lr - tint.dr) * h0);
+        var ag = Math.floor(tint.dg + (tint.lg - tint.dg) * h0);
+        var ab = Math.floor(tint.db + (tint.lb - tint.db) * h0);
+        var o = idx * 4;
+        albedoData[o] = ar;
+        albedoData[o + 1] = ag;
+        albedoData[o + 2] = ab;
+        albedoData[o + 3] = 255;
+        var rg = Math.floor(255 * (0.36 + 0.56 * h0));
+        roughData[o] = roughData[o + 1] = roughData[o + 2] = rg;
+        roughData[o + 3] = 255;
+        var db = Math.floor(128 + (h0 - 0.5) * 230);
+        if (db < 2) db = 2;
+        if (db > 253) db = 253;
+        dispData[o] = dispData[o + 1] = dispData[o + 2] = db;
+        dispData[o + 3] = 255;
+        normData[o] = Math.floor((nx * 0.5 + 0.5) * 255);
+        normData[o + 1] = Math.floor((ny * 0.5 + 0.5) * 255);
+        normData[o + 2] = Math.floor((nz * 0.5 + 0.5) * 255);
+        normData[o + 3] = 255;
+      }
+    }
+
+    function dataToTex(data, encHint) {
+      var canvas = document.createElement('canvas');
+      canvas.width = canvas.height = outSize;
+      var ctx = canvas.getContext('2d');
+      ctx.putImageData(new ImageData(data, outSize, outSize), 0, 0);
+      var tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 8;
+      if (
+        THREE.SRGBColorSpace != null &&
+        THREE.LinearSRGBColorSpace != null &&
+        tex.colorSpace !== undefined
+      ) {
+        tex.colorSpace =
+          encHint === 'srgb' ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+      } else if (THREE.sRGBEncoding !== undefined && tex.encoding !== undefined) {
+        tex.encoding =
+          encHint === 'srgb' ? THREE.sRGBEncoding : THREE.LinearEncoding;
+      }
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    return {
+      albedo: dataToTex(albedoData, 'srgb'),
+      roughness: dataToTex(roughData, 'linear'),
+      displacement: dataToTex(dispData, 'linear'),
+      normal: dataToTex(normData, 'linear')
+    };
   }
 
   /** Resolve mesh for Tier A material swap (some A-Frame builds nest the mesh). */
@@ -168,13 +231,13 @@
     var sh;
     var sd;
     if (kind === 'floor' || kind === 'ceiling') {
-      sw = Math.max(2, Math.min(20, Math.round(width / Math.max(cellSize * 0.5, 0.05))));
-      sd = Math.max(2, Math.min(20, 8));
+      sw = Math.max(6, Math.min(20, Math.round(width / Math.max(cellSize * 0.26, 0.05))));
+      sd = Math.max(10, Math.min(20, 16));
       sh = 1;
     } else {
-      sw = Math.max(2, Math.min(20, Math.round(width / Math.max(cellSize * 0.5, 0.05))));
-      sh = Math.max(2, Math.min(20, Math.round(height / 0.4)));
-      sd = Math.max(2, Math.min(20, 6));
+      sw = Math.max(6, Math.min(20, Math.round(width / Math.max(cellSize * 0.26, 0.05))));
+      sh = Math.max(10, Math.min(20, Math.round(height / 0.2)));
+      sd = Math.max(8, Math.min(20, 14));
     }
     el.setAttribute('geometry', {
       primitive: 'box',
@@ -197,50 +260,38 @@
     var THREE = AFRAME.THREE;
     var seed = matOpts.seed != null ? matOpts.seed >>> 0 : 1;
     var useDisp = matOpts.displacement !== false;
-    /* Defaults tuned so undulation reads at room scale (meters); reduce on low-end if needed. */
-    var scF = matOpts.displacementScaleFloor != null ? matOpts.displacementScaleFloor : 0.14;
-    var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.09;
-    var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.11;
+    /* Stronger defaults + normalMap carry most of the readable relief. */
+    var scF = matOpts.displacementScaleFloor != null ? matOpts.displacementScaleFloor : 0.3;
+    var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.22;
+    var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.26;
 
-    /* repeat < 1 stretches one texture across more surface → larger, readable features */
-    var repFloorU = 0.48;
-    var repFloorV = 0.48;
-    var repWallU = 0.42;
-    var repWallV = 0.58;
-    var repCeilU = 0.5;
-    var repCeilV = 0.5;
+    /* repeat < 1 → fewer, larger tiles on each face */
+    var repFloorU = 0.38;
+    var repFloorV = 0.38;
+    var repWallU = 0.34;
+    var repWallV = 0.48;
+    var repCeilU = 0.4;
+    var repCeilV = 0.4;
 
     var textureBundle = null;
     function ensureTextureBundle() {
       if (textureBundle) return textureBundle;
-      var texFloor = makeNoiseCanvasTexture(THREE, 128, seed ^ 0x243f6a88, 0.85);
-      var texWall = makeNoiseCanvasTexture(THREE, 128, (seed + 1) ^ 0x85a308d3, 0.7);
-      var texCeil = makeNoiseCanvasTexture(THREE, 128, (seed + 2) ^ 0x13198a2e, 0.55);
-      texFloor.repeat.set(repFloorU, repFloorV);
-      texWall.repeat.set(repWallU, repWallV);
-      texCeil.repeat.set(repCeilU, repCeilV);
-      [texFloor, texWall, texCeil].forEach(function (t) {
-        t.needsUpdate = true;
-      });
-      var dispFloor = useDisp ? makeDisplacementCanvasTexture(THREE, 128, seed ^ 0xdeadbeef) : null;
-      var dispWall = useDisp ? makeDisplacementCanvasTexture(THREE, 128, (seed + 3) ^ 0xcafebabe) : null;
-      var dispCeil = useDisp ? makeDisplacementCanvasTexture(THREE, 128, (seed + 5) ^ 0x0badf00d) : null;
-      if (dispFloor) {
-        dispFloor.repeat.set(repFloorU, repFloorV);
-        dispWall.repeat.set(repWallU, repWallV);
-        dispCeil.repeat.set(repCeilU, repCeilV);
-        [dispFloor, dispWall, dispCeil].forEach(function (t) {
+      var outSize = 192;
+      var floorSet = makeTierSurfaceTextures(THREE, outSize, seed ^ 0x243f6a88, 'floor');
+      var wallSet = makeTierSurfaceTextures(THREE, outSize, (seed + 1) ^ 0x85a308d3, 'wall');
+      var ceilSet = makeTierSurfaceTextures(THREE, outSize, (seed + 2) ^ 0x13198a2e, 'ceiling');
+
+      function setRep(s, u, v) {
+        [s.albedo, s.roughness, s.displacement, s.normal].forEach(function (t) {
+          t.repeat.set(u, v);
           t.needsUpdate = true;
         });
       }
-      textureBundle = {
-        texFloor: texFloor,
-        texWall: texWall,
-        texCeil: texCeil,
-        dispFloor: dispFloor,
-        dispWall: dispWall,
-        dispCeil: dispCeil
-      };
+      setRep(floorSet, repFloorU, repFloorV);
+      setRep(wallSet, repWallU, repWallV);
+      setRep(ceilSet, repCeilU, repCeilV);
+
+      textureBundle = { floor: floorSet, wall: wallSet, ceiling: ceilSet };
       return textureBundle;
     }
 
@@ -258,50 +309,47 @@
       var nodes = rootEl.querySelectorAll('[data-wg-surf]');
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
-        if (el.getAttribute('data-wg-tier-a-mat') === '1') continue;
         var kind = el.getAttribute('data-wg-surf');
         var mesh = getEntityMesh(el);
         if (!mesh) continue;
+        if (mesh.material && mesh.material.userData && mesh.material.userData.wgTierA) continue;
 
-        var map = kind === 'wall' || kind === 'trim' ? b.texWall : kind === 'ceiling' ? b.texCeil : b.texFloor;
-        var color =
-          kind === 'wall' || kind === 'trim'
-            ? 0xc5cdd4
-            : kind === 'ceiling'
-              ? 0xa8b8c8
-              : 0x8faa8e;
-        var rough = kind === 'wall' || kind === 'trim' ? 0.82 : kind === 'ceiling' ? 0.88 : 0.86;
+        var set =
+          kind === 'floor' ? b.floor : kind === 'ceiling' ? b.ceiling : b.wall;
+
+        el.removeAttribute('material');
+        el.removeAttribute('color');
+
         var dispMap = null;
         var dScale = 0;
         var dBias = 0;
         if (useDisp && kind !== 'trim') {
-          if (kind === 'floor') {
-            dispMap = b.dispFloor;
-            dScale = scF;
-          } else if (kind === 'ceiling') {
-            dispMap = b.dispCeil;
-            dScale = scC;
-          } else {
-            dispMap = b.dispWall;
-            dScale = scW;
-          }
+          dispMap = set.displacement;
+          if (kind === 'floor') dScale = scF;
+          else if (kind === 'ceiling') dScale = scC;
+          else dScale = scW;
           dBias = -dScale * 0.5;
         }
+
         disposeMaterial(mesh.material);
         var matParams = {
-          color: color,
-          map: map,
-          roughnessMap: map,
-          roughness: rough,
-          metalness: 0.06,
-          envMapIntensity: 0.45
+          color: 0xffffff,
+          map: set.albedo,
+          roughnessMap: set.roughness,
+          normalMap: set.normal,
+          normalScale: new THREE.Vector2(2.8, 2.8),
+          roughness: 1,
+          metalness: 0.05,
+          envMapIntensity: 0.58
         };
         if (dispMap && dScale > 0) {
           matParams.displacementMap = dispMap;
           matParams.displacementScale = dScale;
           matParams.displacementBias = dBias;
         }
-        mesh.material = new THREE.MeshStandardMaterial(matParams);
+        var mat = new THREE.MeshStandardMaterial(matParams);
+        mat.userData.wgTierA = 1;
+        mesh.material = mat;
         el.setAttribute('data-wg-tier-a-mat', '1');
       }
     }
@@ -310,6 +358,7 @@
       requestAnimationFrame(function () {
         applyTierAMaterialsToEntities();
         setTimeout(applyTierAMaterialsToEntities, 120);
+        setTimeout(applyTierAMaterialsToEntities, 400);
       });
     });
   }
@@ -389,10 +438,8 @@
         tr.setAttribute('height', String(trimH));
         tr.setAttribute('depth', String(trimD));
         tr.setAttribute('position', cx + ' ' + trimH / 2 + ' ' + cz);
-        if (tierA) {
-          tr.setAttribute('data-wg-surf', 'trim');
-          tr.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
-        } else tr.setAttribute('color', '#4a5560');
+        if (tierA) tr.setAttribute('data-wg-surf', 'trim');
+        else tr.setAttribute('color', '#4a5560');
         tr.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(tr);
       }
@@ -417,10 +464,8 @@
         trs.setAttribute('height', String(trimH));
         trs.setAttribute('depth', String(trimD));
         trs.setAttribute('position', cxs + ' ' + trimH / 2 + ' ' + czs);
-        if (tierA) {
-          trs.setAttribute('data-wg-surf', 'trim');
-          trs.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
-        } else trs.setAttribute('color', '#4a5560');
+        if (tierA) trs.setAttribute('data-wg-surf', 'trim');
+        else trs.setAttribute('color', '#4a5560');
         trs.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(trs);
       }
@@ -444,10 +489,8 @@
         tre.setAttribute('height', String(trimH));
         tre.setAttribute('depth', String(runH));
         tre.setAttribute('position', cxe + ' ' + trimH / 2 + ' ' + cze);
-        if (tierA) {
-          tre.setAttribute('data-wg-surf', 'trim');
-          tre.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
-        } else tre.setAttribute('color', '#4a5560');
+        if (tierA) tre.setAttribute('data-wg-surf', 'trim');
+        else tre.setAttribute('color', '#4a5560');
         tre.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(tre);
       }
@@ -471,10 +514,8 @@
         trw.setAttribute('height', String(trimH));
         trw.setAttribute('depth', String(runHw));
         trw.setAttribute('position', cxw + ' ' + trimH / 2 + ' ' + czw);
-        if (tierA) {
-          trw.setAttribute('data-wg-surf', 'trim');
-          trw.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
-        } else trw.setAttribute('color', '#4a5560');
+        if (tierA) trw.setAttribute('data-wg-surf', 'trim');
+        else trw.setAttribute('color', '#4a5560');
         trw.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(trw);
       }
@@ -558,7 +599,6 @@
         fb.setAttribute('floor', '');
         if (tierA) {
           fb.setAttribute('data-wg-surf', 'floor');
-          fb.setAttribute('material', 'color: #8faa8e; roughness: 0.9; metalness: 0.04');
           applyTierABoxGeometry(fb, widthW, floorThickness, cellSize, 'floor', cellSize);
         } else {
           fb.setAttribute('color', '#5c6b5c');
@@ -573,7 +613,6 @@
         if (tierA) {
           var cb = document.createElement('a-box');
           cb.setAttribute('data-wg-surf', 'ceiling');
-          cb.setAttribute('material', 'color: #a8b8c8; roughness: 0.92; metalness: 0.05');
           applyTierABoxGeometry(cb, widthW, ceilingThickness, cellSize, 'ceiling', cellSize);
           cb.setAttribute('position', cx + ' ' + ceilY + ' ' + cz);
           cb.setAttribute('shadow', 'cast: true; receive: false');
@@ -599,7 +638,6 @@
         wb.setAttribute('wall', '');
         if (tierA) {
           wb.setAttribute('data-wg-surf', 'wall');
-          wb.setAttribute('material', 'color: #c5cdd4; roughness: 0.85; metalness: 0.06');
           applyTierABoxGeometry(wb, wWidth, wallHeight, cellSize, 'wall', cellSize);
         } else {
           wb.setAttribute('color', '#3d4a4f');
