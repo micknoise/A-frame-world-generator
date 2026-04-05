@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GLB room (Maru)</title>
+    <link rel="icon" href="data:," />
+    <!-- Project site: <base href="/REPO_NAME/" /> -->
+    <script>
+      window.AFRAME_CDN_ROOT = new URL('../libs/aframe-cdn/', document.baseURI).href;
+    </script>
+    <script src="../js/aframe-cdn-rewrite.js"></script>
+    <script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+    <script>
+      if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
+        delete AFRAME.components.grabbable;
+      }
+    </script>
+    <script src="../libs/a-game/a-game.min.js"></script>
+    <script src="./spawn-in-circle.js"></script>
+    <script src="./random-color.js"></script>
+  </head>
+  <body>
+    <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
+    <a-scene
+      id="scene"
+      physics="workerUrl: ../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
+      loading-screen="enabled: false"
+      renderer="colorManagement: true; antialias: true"
+    >
+      <a-assets>
+        <a-asset-item id="room" src="./room_maru.glb"></a-asset-item>
+      </a-assets>
+
+      <a-light type="ambient" color="#ffffff" intensity="0.65"></a-light>
+      <a-light type="directional" color="#fff5e6" intensity="0.5" position="3 8 4"></a-light>
+
+      <a-sky color="#ECECEC"></a-sky>
+
+      <!-- Physics floor (a-game locomotion); room GLB is additional static collision + visuals -->
+      <a-box
+        position="0 0 0"
+        material="color: #46aa46"
+        width="30"
+        height="1"
+        depth="30"
+        body="type: static"
+        shadow="receive: true"
+        floor
+      ></a-box>
+
+      <a-entity
+        gltf-model="#room"
+        position="0 0.5 0"
+        rotation="0 0 0"
+        scale="0.01 0.01 0.01"
+        shadow="cast: true"
+        body="type: static"
+        floor
+      ></a-entity>
+
+      <a-player grabbing locomotion spawn-in-circle="radius: 2" position="0 0 0"></a-player>
+    </a-scene>
+
+    <script>
+      window.addEventListener('unhandledrejection', function (event) {
+        var name = event.reason && event.reason.name;
+        var msg = String((event.reason && event.reason.message) || event.reason || '');
+        if (name === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1) {
+          event.preventDefault();
+        }
+      });
+
+      document.getElementById('scene').addEventListener(
+        'loaded',
+        function () {
+          var scene = document.getElementById('scene');
+          var cam = scene.querySelector('a-camera');
+          if (cam) {
+            cam.setAttribute('look-controls', {
+              pointerLockEnabled: false,
+              touchEnabled: false
+            });
+          }
+        },
+        { once: true }
+      );
+    </script>
+  </body>
+</html>

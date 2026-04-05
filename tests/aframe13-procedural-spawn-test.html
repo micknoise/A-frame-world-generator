@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirect — procedural world is now the site root</title>
+    <script>
+      location.replace(new URL('../', document.baseURI || location.href).href);
+    </script>
+  </head>
+  <body>
+    <p>
+      The A-Frame 1.3 procedural scene lives at <a href="../">the repository root</a>
+      (<code>index.html</code>).
+    </p>
+  </body>
+</html>
