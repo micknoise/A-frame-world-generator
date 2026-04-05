@@ -68,8 +68,11 @@ The **root** [`index.html`](index.html) uses **carve** (BSP + `carveFromBsp`). *
 [`buildAgameTileWorld`](js/world/grid-build.js) defaults to **`visualDetail: 'tierA'`**:
 
 - **Ceiling** slabs aligned with merged floor runs (same XZ footprint, at `wallHeight`).
-- **Baseboard trims** on floor↔wall edges (merged segments; cosmetic, no `floor`/`wall` tags).
-- **Procedural canvas textures** (repeating noise) applied after two `requestAnimationFrame` ticks as `MeshStandardMaterial` on elements tagged `data-wg-surf` (`floor` / `wall` / `ceiling`).
+- **Baseboard trims** on floor↔wall edges (merged segments; cosmetic, tagged `trim`, no `floor`/`wall`).
+- **Procedural canvas textures** (repeating noise) applied after two `requestAnimationFrame` ticks as `MeshStandardMaterial` on `data-wg-surf` (`floor` / `wall` / `ceiling` / `trim`).
+- **Displacement** (default on with tierA): floor/wall/ceiling boxes use **subdivided `BoxGeometry`** (up to 20 segments per axis, A-Frame’s cap) so `displacementMap` + **`displacementScale`** + **`displacementBias`** (`-0.5 * scale` so mid-grey is neutral) can subtly deform the mesh in the vertex shader. The height map is a **separate, smoothed** procedural texture (blur + upscale) so silhouettes stay organic without spikes. **Cannon colliders stay the original boxes** — only the rendered mesh is displaced. Trims skip displacement to save vertices.
+
+Options: **`displacement: false`** to keep PBR maps only; **`displacementScaleFloor` / `displacementScaleWall` / `displacementScaleCeiling`** override amplitudes (world units, typically ~0.02–0.06).
 
 Pass **`visualDetail: 'basic'`** to keep the older flat colors only (still merged geometry).
 
@@ -132,7 +135,7 @@ Use these when you write a custom page (like [`examples/world-bsp-ridge-union/in
 
 **`generateMaze` options:** `width`, `height` — forced odd and ≥ 7.
 
-**`buildAgameTileWorld` options:** `cellSize`, `wallHeight`, `floorThickness`, `ceilingThickness`, `trimHeight`, `trimDepth`, `markerTile`, `goalTile`, `seed`, `includeToys`, `crateCount`, `visualDetail` (`'tierA'` | `'basic'`).
+**`buildAgameTileWorld` options:** `cellSize`, `wallHeight`, `floorThickness`, `ceilingThickness`, `trimHeight`, `trimDepth`, `markerTile`, `goalTile`, `seed`, `includeToys`, `crateCount`, `visualDetail` (`'tierA'` | `'basic'`), `displacement`, `displacementScaleFloor`, `displacementScaleWall`, `displacementScaleCeiling`.
 
 ### 4. Customising the root demo
 

@@ -8,8 +8,9 @@
  * 3. WorldGenCombine.carveFromBsp — grow organic pockets: wall → floor only if ridge-open AND touching
  *    existing BSP floor (repeat `passes` times). BSP connectivity is mostly preserved.
  * 4. buildAgameTileWorld — merge horizontal runs of floor/wall into <a-box> entities with a-game tags;
- *    default visualDetail is 'tierA' (ceiling, trims, procedural PBR textures). Pass visualDetail:
- *    'basic' in options to disable.
+ *    default visualDetail is 'tierA' (ceiling, trims, PBR + subdivided boxes + optional vertex
+ *    displacement from a smoothed procedural map). Pass visualDetail: 'basic' or displacement: false
+ *    to reduce GPU load.
  *
  * PUBLIC API
  * ----------

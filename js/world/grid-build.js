@@ -13,7 +13,8 @@
  *   - <a-box floor> — horizontal runs of adjacent floor cells merged per row → fewer entities.
  *   - <a-box wall> — horizontal runs of adjacent wall cells merged per row, full wallHeight.
  *   - Optional goal marker (visible emissive box) when goalTile is set (mazes).
- *   - visualDetail 'tierA': ceiling slabs, baseboard trims, procedural noise textures on meshes.
+ *   - visualDetail 'tierA': ceiling, trims, procedural albedo/roughness + optional mesh displacement
+ *     (smoother height texture + displacementScale/displacementBias; physics remain simple boxes).
  *   - Static purple platform + three small dynamic grabbable cubes near spawn (optional).
  *   - Scattered dynamic crates on random floor cells (seeded).
  *
@@ -23,6 +24,8 @@
  *     with repeating canvas noise (roughness/detail) after a short rAF delay once meshes exist.
  *   goalTile: { x, y } — floor tile for a visible “exit” pillar (no floor/wall tag; cosmetic).
  *   ceilingThickness, trimHeight, trimDepth — only used when visualDetail === 'tierA'.
+ *   displacement — default true with tierA; set false to skip displacementMap (saves shader cost).
+ *   displacementScaleFloor / displacementScaleWall / displacementScaleCeiling — world-unit amplitudes.
  *
  * PUBLIC API
  * ----------
@@ -78,10 +81,109 @@
     return tex;
   }
 
-  /** After A-Frame creates meshes, swap to PBR materials with procedural repeat. */
-  function scheduleTierAMaterials(rootEl, seed) {
+  /**
+   * Low-frequency blurred heightfield for displacementMap (avoids harsh spikes on subdivided boxes).
+   * Neutral mid-grey ≈ 0.5 after bias so displacementScale controls amplitude around the surface.
+   */
+  function makeDisplacementCanvasTexture(THREE, outSize, seed) {
+    var rng = mulberry32(seed >>> 0);
+    var n = 36;
+    var g = [];
+    for (var j = 0; j < n; j++) {
+      g[j] = [];
+      for (var i = 0; i < n; i++) g[j][i] = rng();
+    }
+    var b = [];
+    for (var y = 0; y < n; y++) {
+      b[y] = [];
+      for (var x = 0; x < n; x++) {
+        var s = 0;
+        var c = 0;
+        for (var dj = -2; dj <= 2; dj++) {
+          for (var di = -2; di <= 2; di++) {
+            var yy = Math.max(0, Math.min(n - 1, y + dj));
+            var xx = Math.max(0, Math.min(n - 1, x + di));
+            s += g[yy][xx];
+            c++;
+          }
+        }
+        b[y][x] = s / c;
+      }
+    }
+    outSize = outSize || 128;
+    var canvas = document.createElement('canvas');
+    canvas.width = canvas.height = outSize;
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(outSize, outSize);
+    var data = img.data;
+    for (var py = 0; py < outSize; py++) {
+      for (var px = 0; px < outSize; px++) {
+        var fx = (px / (outSize - 1)) * (n - 1);
+        var fy = (py / (outSize - 1)) * (n - 1);
+        var x0 = Math.floor(fx);
+        var y0 = Math.floor(fy);
+        var tx = fx - x0;
+        var ty = fy - y0;
+        var x1 = Math.min(n - 1, x0 + 1);
+        var y1 = Math.min(n - 1, y0 + 1);
+        var v00 = b[y0][x0];
+        var v10 = b[y0][x1];
+        var v01 = b[y1][x0];
+        var v11 = b[y1][x1];
+        var v = v00 * (1 - tx) * (1 - ty) + v10 * tx * (1 - ty) + v01 * (1 - tx) * ty + v11 * tx * ty;
+        var byte = Math.floor(255 * (0.38 + 0.42 * v));
+        var idx = (py * outSize + px) * 4;
+        data[idx] = data[idx + 1] = data[idx + 2] = byte;
+        data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2.5, 2.5);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  /** A-Frame box geometry is capped at 20 segments per axis (see geometry box schema). */
+  function applyTierABoxGeometry(el, width, height, depth, kind, cellSize) {
+    var sw;
+    var sh;
+    var sd;
+    if (kind === 'floor' || kind === 'ceiling') {
+      sw = Math.max(2, Math.min(20, Math.round(width / Math.max(cellSize * 0.5, 0.05))));
+      sd = Math.max(2, Math.min(20, 8));
+      sh = 1;
+    } else {
+      sw = Math.max(2, Math.min(20, Math.round(width / Math.max(cellSize * 0.5, 0.05))));
+      sh = Math.max(2, Math.min(20, Math.round(height / 0.4)));
+      sd = Math.max(2, Math.min(20, 6));
+    }
+    el.setAttribute('geometry', {
+      primitive: 'box',
+      width: width,
+      height: height,
+      depth: depth,
+      segmentsWidth: sw,
+      segmentsHeight: sh,
+      segmentsDepth: sd
+    });
+  }
+
+  /**
+   * After A-Frame creates meshes: PBR + optional displacement (vertex shader, same UVs as map).
+   * Trims (data-wg-surf="trim") skip displacement — small pieces, not worth subdividing.
+   */
+  function scheduleTierAMaterials(rootEl, matOpts) {
+    matOpts = matOpts || {};
     if (!window.AFRAME || !AFRAME.THREE) return;
     var THREE = AFRAME.THREE;
+    var seed = matOpts.seed != null ? matOpts.seed >>> 0 : 1;
+    var useDisp = matOpts.displacement !== false;
+    var scF = matOpts.displacementScaleFloor != null ? matOpts.displacementScaleFloor : 0.042;
+    var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.028;
+    var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.034;
+
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         var texFloor = makeNoiseCanvasTexture(THREE, 96, seed ^ 0x243f6a88, 0.85);
@@ -94,25 +196,63 @@
           t.needsUpdate = true;
         });
 
+        var dispFloor = useDisp ? makeDisplacementCanvasTexture(THREE, 112, seed ^ 0xdeadbeef) : null;
+        var dispWall = useDisp ? makeDisplacementCanvasTexture(THREE, 112, (seed + 3) ^ 0xcafebabe) : null;
+        var dispCeil = useDisp ? makeDisplacementCanvasTexture(THREE, 112, (seed + 5) ^ 0x0badf00d) : null;
+        if (dispFloor) {
+          dispFloor.repeat.set(2.2, 2.2);
+          dispWall.repeat.set(1.8, 2.4);
+          dispCeil.repeat.set(2, 2);
+          [dispFloor, dispWall, dispCeil].forEach(function (t) {
+            t.needsUpdate = true;
+          });
+        }
+
         var nodes = rootEl.querySelectorAll('[data-wg-surf]');
         for (var i = 0; i < nodes.length; i++) {
           var el = nodes[i];
           var kind = el.getAttribute('data-wg-surf');
           var mesh = el.getObject3D('mesh');
           if (!mesh || !mesh.material) continue;
-          var map = kind === 'wall' ? texWall : kind === 'ceiling' ? texCeil : texFloor;
+          var map = kind === 'wall' || kind === 'trim' ? texWall : kind === 'ceiling' ? texCeil : texFloor;
           var color =
-            kind === 'wall' ? 0xc5cdd4 : kind === 'ceiling' ? 0xa8b8c8 : 0x8faa8e;
-          var rough = kind === 'wall' ? 0.82 : kind === 'ceiling' ? 0.88 : 0.86;
+            kind === 'wall' || kind === 'trim'
+              ? 0xc5cdd4
+              : kind === 'ceiling'
+                ? 0xa8b8c8
+                : 0x8faa8e;
+          var rough = kind === 'wall' || kind === 'trim' ? 0.82 : kind === 'ceiling' ? 0.88 : 0.86;
+          var dispMap = null;
+          var dScale = 0;
+          var dBias = 0;
+          if (useDisp && kind !== 'trim') {
+            if (kind === 'floor') {
+              dispMap = dispFloor;
+              dScale = scF;
+            } else if (kind === 'ceiling') {
+              dispMap = dispCeil;
+              dScale = scC;
+            } else {
+              dispMap = dispWall;
+              dScale = scW;
+            }
+            dBias = -dScale * 0.5;
+          }
           mesh.material.dispose();
-          mesh.material = new THREE.MeshStandardMaterial({
+          var matParams = {
             color: color,
             map: map,
             roughnessMap: map,
             roughness: rough,
             metalness: 0.06,
             envMapIntensity: 0.45
-          });
+          };
+          if (dispMap && dScale > 0) {
+            matParams.displacementMap = dispMap;
+            matParams.displacementScale = dScale;
+            matParams.displacementBias = dBias;
+          }
+          mesh.material = new THREE.MeshStandardMaterial(matParams);
         }
       });
     });
@@ -193,8 +333,10 @@
         tr.setAttribute('height', String(trimH));
         tr.setAttribute('depth', String(trimD));
         tr.setAttribute('position', cx + ' ' + trimH / 2 + ' ' + cz);
-        if (tierA) tr.setAttribute('data-wg-surf', 'wall');
-        else tr.setAttribute('color', '#4a5560');
+        if (tierA) {
+          tr.setAttribute('data-wg-surf', 'trim');
+          tr.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
+        } else tr.setAttribute('color', '#4a5560');
         tr.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(tr);
       }
@@ -219,8 +361,10 @@
         trs.setAttribute('height', String(trimH));
         trs.setAttribute('depth', String(trimD));
         trs.setAttribute('position', cxs + ' ' + trimH / 2 + ' ' + czs);
-        if (tierA) trs.setAttribute('data-wg-surf', 'wall');
-        else trs.setAttribute('color', '#4a5560');
+        if (tierA) {
+          trs.setAttribute('data-wg-surf', 'trim');
+          trs.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
+        } else trs.setAttribute('color', '#4a5560');
         trs.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(trs);
       }
@@ -244,8 +388,10 @@
         tre.setAttribute('height', String(trimH));
         tre.setAttribute('depth', String(runH));
         tre.setAttribute('position', cxe + ' ' + trimH / 2 + ' ' + cze);
-        if (tierA) tre.setAttribute('data-wg-surf', 'wall');
-        else tre.setAttribute('color', '#4a5560');
+        if (tierA) {
+          tre.setAttribute('data-wg-surf', 'trim');
+          tre.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
+        } else tre.setAttribute('color', '#4a5560');
         tre.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(tre);
       }
@@ -269,8 +415,10 @@
         trw.setAttribute('height', String(trimH));
         trw.setAttribute('depth', String(runHw));
         trw.setAttribute('position', cxw + ' ' + trimH / 2 + ' ' + czw);
-        if (tierA) trw.setAttribute('data-wg-surf', 'wall');
-        else trw.setAttribute('color', '#4a5560');
+        if (tierA) {
+          trw.setAttribute('data-wg-surf', 'trim');
+          trw.setAttribute('material', 'color: #b8c0c8; roughness: 0.88; metalness: 0.05');
+        } else trw.setAttribute('color', '#4a5560');
         trw.setAttribute('shadow', 'cast: false; receive: true');
         rootEl.appendChild(trw);
       }
@@ -292,7 +440,11 @@
    *   seed?: number,
    *   includeToys?: boolean,
    *   crateCount?: number,
-   *   visualDetail?: 'basic' | 'tierA'
+   *   visualDetail?: 'basic' | 'tierA',
+   *   displacement?: boolean,
+   *   displacementScaleFloor?: number,
+   *   displacementScaleWall?: number,
+   *   displacementScaleCeiling?: number
    * }} [options]
    * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number, markerTile: {x:number,y:number}, goalTile?: {x:number,y:number} }}
    */
@@ -351,12 +503,13 @@
         if (tierA) {
           fb.setAttribute('data-wg-surf', 'floor');
           fb.setAttribute('material', 'color: #8faa8e; roughness: 0.9; metalness: 0.04');
+          applyTierABoxGeometry(fb, widthW, floorThickness, cellSize, 'floor', cellSize);
         } else {
           fb.setAttribute('color', '#5c6b5c');
+          fb.setAttribute('width', String(widthW));
+          fb.setAttribute('height', String(floorThickness));
+          fb.setAttribute('depth', String(cellSize));
         }
-        fb.setAttribute('width', String(widthW));
-        fb.setAttribute('height', String(floorThickness));
-        fb.setAttribute('depth', String(cellSize));
         fb.setAttribute('position', cx + ' ' + floorY + ' ' + cz);
         fb.setAttribute('shadow', 'receive: true');
         rootEl.appendChild(fb);
@@ -365,9 +518,7 @@
           var cb = document.createElement('a-box');
           cb.setAttribute('data-wg-surf', 'ceiling');
           cb.setAttribute('material', 'color: #a8b8c8; roughness: 0.92; metalness: 0.05');
-          cb.setAttribute('width', String(widthW));
-          cb.setAttribute('height', String(ceilingThickness));
-          cb.setAttribute('depth', String(cellSize));
+          applyTierABoxGeometry(cb, widthW, ceilingThickness, cellSize, 'ceiling', cellSize);
           cb.setAttribute('position', cx + ' ' + ceilY + ' ' + cz);
           cb.setAttribute('shadow', 'cast: true; receive: false');
           rootEl.appendChild(cb);
@@ -393,12 +544,13 @@
         if (tierA) {
           wb.setAttribute('data-wg-surf', 'wall');
           wb.setAttribute('material', 'color: #c5cdd4; roughness: 0.85; metalness: 0.06');
+          applyTierABoxGeometry(wb, wWidth, wallHeight, cellSize, 'wall', cellSize);
         } else {
           wb.setAttribute('color', '#3d4a4f');
+          wb.setAttribute('width', String(wWidth));
+          wb.setAttribute('height', String(wallHeight));
+          wb.setAttribute('depth', String(cellSize));
         }
-        wb.setAttribute('width', String(wWidth));
-        wb.setAttribute('height', String(wallHeight));
-        wb.setAttribute('depth', String(cellSize));
         wb.setAttribute('position', wcx + ' ' + wallHeight / 2 + ' ' + wcz);
         wb.setAttribute('shadow', 'cast: true; receive: true');
         rootEl.appendChild(wb);
@@ -444,7 +596,15 @@
       rootEl.appendChild(crate);
     }
 
-    if (tierA) scheduleTierAMaterials(rootEl, seed);
+    if (tierA) {
+      scheduleTierAMaterials(rootEl, {
+        seed: seed,
+        displacement: options.displacement !== false,
+        displacementScaleFloor: options.displacementScaleFloor,
+        displacementScaleWall: options.displacementScaleWall,
+        displacementScaleCeiling: options.displacementScaleCeiling
+      });
+    }
 
     var result = {
       spawnWorld: spawnWorld,
