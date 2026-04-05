@@ -264,8 +264,8 @@
     var wlY = wl * heightScale;
     var surfaceY = Math.max(heightAtOrigin, centerY);
     if (surfaceY < wlY + 0.05) surfaceY = wlY + 0.08;
-    /* a-game player origin + locomotion recovery; clearance above actual mesh surface. */
-    var spawnPlayerY = surfaceY + 3.1;
+    /* Generous clearance: a-game rig / floor raycast origin is not always mesh-local surfaceY. */
+    var spawnPlayerY = surfaceY + 14;
 
     return {
       positions: positions,

@@ -110,7 +110,8 @@
       <a-light type="ambient" color="#BBD2E0" intensity="0.5"></a-light>
       <a-light type="directional" color="#FFF5E0" intensity="1.05" position="1 2 0.6"></a-light>
 
-      <a-entity id="world-root">
+      <!-- Lower terrain + ocean vs scene origin so spawn Y stays comfortably above the mesh. -->
+      <a-entity id="world-root" position="0 -8 0">
         <!-- floor: a-game locomotion raycaster targets [floor]; mesh lives under this entity. -->
         <a-entity id="terrain-holder" floor=""></a-entity>
       </a-entity>
