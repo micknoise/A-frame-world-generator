@@ -131,12 +131,28 @@
     if (tiles[y] && tiles[y][x] !== undefined) tiles[y][x] = 'floor';
   }
 
-  /** Post-order walk: connect each pair of child subtrees; propagate a center up the tree. */
-  function connectTree(node, tiles) {
+  /**
+   * Post-order walk: connect each pair of child subtrees; propagate a center up the tree.
+   * @param {{sx:number,sy:number,ex:number,ey:number}[]|null} [corridorLegs] — when provided, each
+   *   axis-aligned leg of every carved L-corridor (same order as carveCorridor: horizontal then vertical).
+   */
+  function connectTree(node, tiles, corridorLegs) {
     if (!node.left && !node.right) return node.center;
-    var leftCenter = connectTree(node.left, tiles);
-    var rightCenter = connectTree(node.right, tiles);
+    var leftCenter = connectTree(node.left, tiles, corridorLegs);
+    var rightCenter = connectTree(node.right, tiles, corridorLegs);
     carveCorridor(tiles, leftCenter, rightCenter);
+    if (corridorLegs) {
+      var ax = leftCenter.x;
+      var ay = leftCenter.y;
+      var bx = rightCenter.x;
+      var by = rightCenter.y;
+      if (ax !== bx) {
+        corridorLegs.push({ sx: ax, sy: ay, ex: bx, ey: ay });
+      }
+      if (ay !== by) {
+        corridorLegs.push({ sx: bx, sy: ay, ex: bx, ey: by });
+      }
+    }
     node.center = {
       x: Math.floor((leftCenter.x + rightCenter.x) / 2),
       y: Math.floor((leftCenter.y + rightCenter.y) / 2)
@@ -147,7 +163,7 @@
   /**
    * @param {number} seed
    * @param {{ width?: number, height?: number, minLeafSize?: number, maxDepth?: number }} [opts]
-   * @returns {{ tiles: string[][], width: number, height: number, markers: Array<{kind:string,x:number,y:number}>, regions: object[], nodes: object[] }}
+   * @returns {{ tiles: string[][], width: number, height: number, markers: Array<{kind:string,x:number,y:number}>, regions: object[], nodes: object[], corridorLegs: {sx:number,sy:number,ex:number,ey:number}[] }}
    */
   function generateBspDungeon(seed, opts) {
     opts = opts || {};
@@ -178,7 +194,8 @@
       nodes.push({ id: leaf.room.id, x: leaf.center.x, y: leaf.center.y });
     }
 
-    connectTree(root, tiles);
+    var corridorLegs = [];
+    connectTree(root, tiles, corridorLegs);
 
     var markers = nodes.length ? [{ kind: 'start', x: nodes[0].x, y: nodes[0].y }] : [];
 
@@ -188,7 +205,8 @@
       height: height,
       markers: markers,
       regions: regions,
-      nodes: nodes
+      nodes: nodes,
+      corridorLegs: corridorLegs
     };
   }
 

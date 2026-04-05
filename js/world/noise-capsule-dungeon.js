@@ -445,7 +445,7 @@
     var ceilAmp = options.ceilingDisplacement != null ? options.ceilingDisplacement : 0.25;
     var uvScale = options.uvScale != null ? options.uvScale : 2;
     var sphereSeg = options.sphereSegments != null ? options.sphereSegments : 32;
-    var capRadius = options.corridorRadius != null ? options.corridorRadius : CS * 0.42;
+    var capRadius = options.corridorRadius != null ? options.corridorRadius : CS * 0.48;
     var capAround =
       options.tubeAroundSegments != null
         ? options.tubeAroundSegments
@@ -476,30 +476,51 @@
       cz = (r.y + r.height * 0.5) * CS;
       rw = r.width * CS * 0.5;
       rh = r.height * CS * 0.5;
-      R = Math.min(rw, rh, WH * 0.48) * 0.9;
+      /* Horizontal: nearly fill the carved floor rectangle; vertical: true half-height (not WH*0.48). */
+      var rVertCap = WH * 0.5 - 0.06;
+      var rHoriz = Math.min(rw, rh) * 0.98;
+      var rFloor = Math.min(capRadius * 1.35, rVertCap);
+      R = Math.min(rHoriz, rVertCap);
+      if (R < rFloor) R = rFloor;
       if (R < CS * 0.35) R = CS * 0.35;
       rawSphere = buildSphereMesh(cx, cy, cz, R, sphereSeg, sphereSeg);
       var procS = processMesh(rawSphere, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
       if (procS) parts.push(procS);
     }
 
-    var pairs = extractCorridorPairs(nodes);
-    var pi, ax, az, bx, bz, segAlongH, segAlongV, lenH, lenV;
-    for (pi = 0; pi < pairs.length; pi++) {
-      ax = pairs[pi][0].x * CS;
-      az = pairs[pi][0].y * CS;
-      bx = pairs[pi][1].x * CS;
-      bz = pairs[pi][1].y * CS;
-      lenH = Math.abs(bx - ax);
-      lenV = Math.abs(bz - az);
-      segAlongH = Math.max(capAlong, Math.ceil(lenH / Math.max(CS * 0.35, 0.5)) * 2);
-      segAlongV = Math.max(capAlong, Math.ceil(lenV / Math.max(CS * 0.35, 0.5)) * 2);
-      rawTube = buildTubeMesh(ax, midY, az, bx, midY, az, capRadius, capAround, segAlongH);
-      var procH = processMesh(rawTube, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
-      if (procH) parts.push(procH);
-      rawTube = buildTubeMesh(bx, midY, az, bx, midY, bz, capRadius, capAround, segAlongV);
-      var procV = processMesh(rawTube, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
-      if (procV) parts.push(procV);
+    var legs = bsp.corridorLegs;
+    var li, ax, az, bx, bz, segAlong, lenLeg;
+    if (legs && legs.length) {
+      for (li = 0; li < legs.length; li++) {
+        ax = legs[li].sx * CS;
+        az = legs[li].sy * CS;
+        bx = legs[li].ex * CS;
+        bz = legs[li].ey * CS;
+        lenLeg = Math.sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
+        segAlong = Math.max(capAlong, Math.ceil(lenLeg / Math.max(CS * 0.35, 0.5)) * 2);
+        rawTube = buildTubeMesh(ax, midY, az, bx, midY, bz, capRadius, capAround, segAlong);
+        var procL = processMesh(rawTube, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
+        if (procL) parts.push(procL);
+      }
+    } else {
+      var pairs = extractCorridorPairs(nodes);
+      var pi, segAlongH, segAlongV, lenH, lenV;
+      for (pi = 0; pi < pairs.length; pi++) {
+        ax = pairs[pi][0].x * CS;
+        az = pairs[pi][0].y * CS;
+        bx = pairs[pi][1].x * CS;
+        bz = pairs[pi][1].y * CS;
+        lenH = Math.abs(bx - ax);
+        lenV = Math.abs(bz - az);
+        segAlongH = Math.max(capAlong, Math.ceil(lenH / Math.max(CS * 0.35, 0.5)) * 2);
+        segAlongV = Math.max(capAlong, Math.ceil(lenV / Math.max(CS * 0.35, 0.5)) * 2);
+        rawTube = buildTubeMesh(ax, midY, az, bx, midY, az, capRadius, capAround, segAlongH);
+        var procH = processMesh(rawTube, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
+        if (procH) parts.push(procH);
+        rawTube = buildTubeMesh(bx, midY, az, bx, midY, bz, capRadius, capAround, segAlongV);
+        var procV = processMesh(rawTube, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
+        if (procV) parts.push(procV);
+      }
     }
 
     if (!parts.length) {
