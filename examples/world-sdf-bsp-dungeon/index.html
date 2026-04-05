@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BSP smin cave mesh (marching cubes)</title>
+    <link rel="icon" href="data:," />
+    <script>
+      window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
+    </script>
+    <script src="../../js/aframe-cdn-rewrite.js"></script>
+    <script src="../../libs/aframe/aframe-v1.3.0.min.js"></script>
+    <script>
+      if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
+        delete AFRAME.components.grabbable;
+      }
+    </script>
+    <script src="../../libs/a-game/a-game.min.js"></script>
+    <script src="../../js/world/mc-tables.js"></script>
+    <script src="../../js/world/bsp-dungeon.js"></script>
+    <script src="../../js/world/sdf-bsp-dungeon.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { overflow: hidden; background: #000; font-family: system-ui, -apple-system, sans-serif; }
+
+      #hud {
+        position: fixed; top: 16px; left: 16px; z-index: 10;
+        background: rgba(0,0,0,0.78); color: #c8e6c9; padding: 16px 20px;
+        border-radius: 8px; backdrop-filter: blur(8px);
+        border: 1px solid rgba(200,230,201,0.15);
+        max-width: 340px; font-size: 13px; line-height: 1.55;
+      }
+      #hud h2 { font-size: 14px; margin-bottom: 10px; color: #a5d6a7; letter-spacing: 0.5px; font-weight: 600; }
+      #hud label { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; }
+      #hud label span { min-width: 30px; text-align: right; }
+      #hud input[type=range] { width: 120px; accent-color: #66bb6a; }
+      #hud input[type=number] {
+        width: 55px; background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(200,230,201,0.2); color: #c8e6c9;
+        padding: 2px 6px; border-radius: 4px; font-family: inherit; font-size: 12px;
+      }
+      #hud button {
+        margin-top: 10px; width: 100%; padding: 8px;
+        background: #2e7d32; color: #e8f5e9; border: none;
+        border-radius: 6px; cursor: pointer; font-family: inherit;
+        font-size: 13px; letter-spacing: 0.3px; transition: background 0.15s;
+      }
+      #hud button:hover { background: #388e3c; }
+      .hint { font-size: 11px; color: #81c784; margin-top: 8px; opacity: 0.65; line-height: 1.45; }
+      .ref { font-size: 11px; color: #aed581; margin-bottom: 8px; }
+      .ref a { color: #c5e1a5; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <p class="ref">Box / plane version (unchanged): <a href="../world-noise-dungeon/">world-noise-dungeon</a></p>
+      <h2>BSP + smin + marching cubes</h2>
+      <label>Seed <input type="number" id="seed" value="1"></label>
+      <label>Grid W <input type="number" id="gridW" value="40" min="16" max="72"></label>
+      <label>Grid H <input type="number" id="gridH" value="34" min="16" max="72"></label>
+      <label>Smooth union (× cell) <input type="range" id="smoothK" min="0.15" max="0.85" step="0.02" value="0.42"><span id="smoothKVal">0.42</span></label>
+      <label>Voxel step <input type="range" id="voxelStep" min="0.38" max="0.85" step="0.02" value="0.52"><span id="voxelStepVal">0.52</span></label>
+      <label>Noise scale <input type="range" id="noiseScale" min="0.1" max="1.2" step="0.05" value="0.38"><span id="noiseScaleVal">0.38</span></label>
+      <label>Surface bump <input type="range" id="surfDisp" min="0" max="0.22" step="0.01" value="0.09"><span id="surfDispVal">0.09</span></label>
+      <button id="generateBtn">&#9654; Regenerate</button>
+      <div class="hint">
+        BSP tiles define wall columns; smooth-min unions round vertical edges and corners. A scalar field
+        is meshed with marching cubes, then value noise displaces along the SDF gradient (like noise terrain
+        / noise dungeon shading). Larger grids or smaller voxels take longer to build.
+      </div>
+    </div>
+
+    <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
+
+    <a-scene
+      id="scene"
+      renderer="antialias: true; colorManagement: true; sortObjects: true"
+      physics="workerUrl: ../../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
+      vr-mode-ui="enabled: false"
+      loading-screen="enabled: false"
+    >
+      <a-assets></a-assets>
+      <a-light type="ambient" color="#223344" intensity="0.28"></a-light>
+      <a-sky color="#0a0e14"></a-sky>
+
+      <a-entity id="world-root"></a-entity>
+      <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
+    </a-scene>
+
+    <script>
+      window.addEventListener('unhandledrejection', function (event) {
+        var name = event.reason && event.reason.name;
+        var msg = String((event.reason && event.reason.message) || event.reason || '');
+        if (name === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1) {
+          event.preventDefault();
+        }
+      });
+
+      function refreshRaycasters(rootScene) {
+        var nodes = rootScene.querySelectorAll('[raycaster]');
+        for (var i = 0; i < nodes.length; i++) {
+          var rc = nodes[i].components && nodes[i].components.raycaster;
+          if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
+        }
+      }
+
+      function relaxPointerLockOnCamera(rootScene) {
+        var cam = rootScene.querySelector('a-camera');
+        if (!cam) return;
+        cam.setAttribute('look-controls', { pointerLockEnabled: false, touchEnabled: false });
+      }
+
+      ['smoothK', 'voxelStep', 'noiseScale', 'surfDisp'].forEach(function (id) {
+        var el = document.getElementById(id);
+        var val = document.getElementById(id + 'Val');
+        el.addEventListener('input', function () { val.textContent = el.value; });
+      });
+
+      var qs = new URLSearchParams(location.search).get('seed');
+      if (qs != null) document.getElementById('seed').value = parseInt(qs, 10) || 1;
+
+      var sceneEl = document.getElementById('scene');
+      var CS = 3;
+      var WH = 3.5;
+
+      function clearWorldRoot() {
+        var root = document.getElementById('world-root');
+        root.object3D.traverse(function (obj) {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (obj.material.map) obj.material.map.dispose();
+            if (obj.material.dispose) obj.material.dispose();
+          }
+        });
+        while (root.lastChild) root.removeChild(root.lastChild);
+        while (root.object3D.children.length) root.object3D.remove(root.object3D.children[0]);
+      }
+
+      function buildWorld() {
+        clearWorldRoot();
+        var root = document.getElementById('world-root');
+
+        var seed = parseInt(document.getElementById('seed').value, 10) || 1;
+        var gridW = parseInt(document.getElementById('gridW').value, 10) || 40;
+        var gridH = parseInt(document.getElementById('gridH').value, 10) || 34;
+
+        var bsp = generateBspDungeon(seed, {
+          width: gridW,
+          height: gridH,
+          minLeafSize: 8,
+          maxDepth: 4
+        });
+
+        var kMul = parseFloat(document.getElementById('smoothK').value);
+        var out = SdfBspDungeon.build(root, bsp.tiles, {
+          seed: seed,
+          cellSize: CS,
+          wallHeight: WH,
+          smoothUnion: CS * kMul,
+          smoothCap: CS * Math.min(0.28, kMul * 0.55),
+          noiseScale: parseFloat(document.getElementById('noiseScale').value),
+          octaves: 4,
+          surfaceDisplacement: parseFloat(document.getElementById('surfDisp').value),
+          uvScale: 2,
+          voxelStep: parseFloat(document.getElementById('voxelStep').value),
+          maxAxisSamples: 124
+        });
+
+        var player = document.getElementById('player');
+        player.setAttribute('position',
+          out.spawnWorld.x + ' ' + out.spawnWorld.y + ' ' + out.spawnWorld.z);
+
+        var cam = player.querySelector('[camera], a-camera');
+        if (cam) {
+          var oldTorch = cam.querySelector('#torch');
+          if (oldTorch) oldTorch.parentNode.removeChild(oldTorch);
+          var torch = document.createElement('a-entity');
+          torch.id = 'torch';
+          torch.setAttribute('light',
+            'type: point; color: #d4c090; intensity: 2.0; distance: 32; decay: 2');
+          cam.appendChild(torch);
+        }
+
+        requestAnimationFrame(function () {
+          refreshRaycasters(sceneEl);
+          setTimeout(function () { refreshRaycasters(sceneEl); }, 120);
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              relaxPointerLockOnCamera(sceneEl);
+            });
+          });
+        });
+      }
+
+      document.getElementById('generateBtn').addEventListener('click', buildWorld);
+
+      sceneEl.addEventListener('loaded', function () {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            buildWorld();
+          });
+        });
+      }, { once: true });
+    </script>
+  </body>
+</html>
