@@ -1,11 +1,11 @@
 /**
  * noise-dungeon.js — BSP dungeon with noise-displaced mesh surfaces
- * and a procedural greyscale stone texture that follows the surface contour.
+ * and displacement-driven greyscale shading.
  *
- * The stone texture is generated from the same noise field used for displacement,
- * sampled at higher frequency. UVs are triplanar-projected from world-space vertex
- * positions so the texture wraps seamlessly across floors, walls, and ceilings
- * without UV seams.
+ * The vertex colour of each vertex directly encodes its displacement amount:
+ * more displaced = lighter, less displaced = darker. This makes the texture
+ * follow the geometry contour exactly. A subtle random grain texture is
+ * multiplied on top for fine surface detail.
  *
  * PUBLIC API
  * ----------
@@ -70,16 +70,15 @@
     return sum / maxAmp;
   };
 
-  // ── Procedural stone texture ────────────────────────────────────────────────
+  // ── Subtle grain texture ────────────────────────────────────────────────────
 
   /**
-   * Generate a tileable greyscale stone texture on a canvas.
-   * Uses the same noise algorithm at high frequency for fine-grain detail,
-   * with a coarse layer for broader lumps. Result is black-to-white stone grain.
+   * Generate a tileable random grain texture — very subtle, just fine modulation.
+   * This is NOT the main visual — it's multiplied on top of the displacement shading.
    */
-  function generateStoneTexture(seed, size) {
-    size = size || 512;
-    var texNoise = new ValueNoise(seed ^ 0xA5A5A5);  // different seed from displacement
+  function generateGrainTexture(seed, size) {
+    size = size || 256;
+    var grainNoise = new ValueNoise(seed ^ 0xBEEF);
     var canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;
     var ctx = canvas.getContext('2d');
@@ -90,37 +89,27 @@
       for (var px = 0; px < size; px++) {
         var u = px / size;
         var v = py / size;
-
-        // Coarse lumps — low frequency, high weight
-        var coarse = texNoise.fbm(u * 4, v * 4, 3);
-        // Medium grain
-        var medium = texNoise.fbm(u * 12 + 50, v * 12 + 50, 4);
-        // Fine grain — high frequency, low weight
-        var fine = texNoise.fbm(u * 32 + 100, v * 32 + 100, 3);
-
-        // Combine: coarse sets the broad shape, fine adds surface detail
-        var val = coarse * 0.5 + medium * 0.3 + fine * 0.2;
-
-        // Contrast stretch to use more of the 0-1 range
-        val = Math.max(0, Math.min(1, (val - 0.25) * 2.0));
-
-        // Map to greyscale range — not pure black/white, more like dark-grey to light-grey
-        var grey = Math.floor(40 + val * 180);  // range 40-220
+        // High-frequency fine grain
+        var grain = grainNoise.fbm(u * 24, v * 24, 3);
+        // Map to a narrow range centred on mid-grey: subtle modulation
+        // 0.0 → ~200, 1.0 → ~255  (i.e. mostly bright, slight darkening in troughs)
+        var grey = Math.floor(200 + grain * 55);
+        grey = Math.max(180, Math.min(255, grey));
 
         var off = (py * size + px) * 4;
-        data[off]     = grey;
-        data[off + 1] = grey;
-        data[off + 2] = grey;
-        data[off + 3] = 255;
+        data[off] = grey; data[off+1] = grey; data[off+2] = grey; data[off+3] = 255;
       }
     }
-
     ctx.putImageData(imgData, 0, 0);
     return canvas;
   }
 
   // ── Displaced quad builder ──────────────────────────────────────────────────
 
+  /**
+   * Now returns displacement values alongside positions so we can encode them
+   * as vertex luminance.
+   */
   function buildDisplacedQuad(corners, subdU, subdV, displaceAxis, displaceSign,
                               amplitude, noise, nScale, nOctaves, seedOffset) {
     var c0 = corners[0], c1 = corners[1], c2 = corners[2], c3 = corners[3];
@@ -128,7 +117,9 @@
     var vertsV = subdV + 1;
     var vertCount = vertsU * vertsV;
     var positions = new Float32Array(vertCount * 3);
-    var idx = 0;
+    var dispValues = new Float32Array(vertCount);  // raw noise [0,1] per vertex
+    var pidx = 0;
+    var didx = 0;
 
     for (var iv = 0; iv <= subdV; iv++) {
       var tv = iv / subdV;
@@ -149,15 +140,17 @@
         if (displaceAxis === 'x' || displaceAxis === 'z') {
           n2 = py * nScale + seedOffset * 1.3;
         }
-        var disp = (noise.fbm(n1, n2, nOctaves) - 0.5) * 2 * amplitude;
+        var noiseVal = noise.fbm(n1, n2, nOctaves);  // [0, 1]
+        var disp = (noiseVal - 0.5) * 2 * amplitude;
 
         if (displaceAxis === 'x') px += disp * displaceSign;
         else if (displaceAxis === 'y') py += disp * displaceSign;
         else pz += disp * displaceSign;
 
-        positions[idx++] = px;
-        positions[idx++] = py;
-        positions[idx++] = pz;
+        positions[pidx++] = px;
+        positions[pidx++] = py;
+        positions[pidx++] = pz;
+        dispValues[didx++] = noiseVal;
       }
     }
 
@@ -166,28 +159,20 @@
     var ti = 0;
     for (var jv = 0; jv < subdV; jv++) {
       for (var ju = 0; ju < subdU; ju++) {
-        var a = jv * vertsU + ju;
-        var b = a + 1;
-        var c = a + vertsU;
-        var d = c + 1;
+        var a = jv * vertsU + ju, b = a + 1, c = a + vertsU, d = c + 1;
         indices[ti++] = a; indices[ti++] = c; indices[ti++] = b;
         indices[ti++] = b; indices[ti++] = c; indices[ti++] = d;
       }
     }
 
-    return { positions: positions, indices: indices, vertCount: vertCount };
+    return { positions: positions, indices: indices, vertCount: vertCount, dispValues: dispValues };
   }
 
   /**
-   * Merge quads → BufferGeometry with smooth normals, vertex colour, AND UVs.
-   * UVs are triplanar from world-space vertex positions:
-   *   - Use vertex normal to decide which projection plane
-   *   - Horizontal faces (|ny| dominant): UV = (x, z)
-   *   - X-facing walls (|nx| dominant): UV = (z, y)
-   *   - Z-facing walls (|nz| dominant): UV = (x, y)
-   * uvScale controls how many world units per texture repeat.
+   * Merge quads → geometry. Vertex colour = displacement luminance (white base).
+   * UVs are triplanar for the subtle grain overlay.
    */
-  function mergeQuadsToGeometry(quads, color, uvScale, THREE) {
+  function mergeQuadsToGeometry(quads, uvScale, THREE) {
     var totalVerts = 0, totalIdx = 0;
     for (var q = 0; q < quads.length; q++) {
       totalVerts += quads[q].vertCount;
@@ -195,18 +180,21 @@
     }
 
     var positions = new Float32Array(totalVerts * 3);
-    var colors = new Float32Array(totalVerts * 3);
-    var normals = new Float32Array(totalVerts * 3);
-    var uvs = new Float32Array(totalVerts * 2);
-    var indices = new Uint32Array(totalIdx);
+    var colors    = new Float32Array(totalVerts * 3);
+    var normals   = new Float32Array(totalVerts * 3);
+    var uvs       = new Float32Array(totalVerts * 2);
+    var indices   = new Uint32Array(totalIdx);
 
     var vOff = 0, iOff = 0, vBase = 0;
     for (q = 0; q < quads.length; q++) {
       positions.set(quads[q].positions, vOff * 3);
+      // Vertex colour = displacement value as greyscale luminance
+      var dv = quads[q].dispValues;
       for (var cv = 0; cv < quads[q].vertCount; cv++) {
-        colors[(vOff + cv) * 3]     = color[0];
-        colors[(vOff + cv) * 3 + 1] = color[1];
-        colors[(vOff + cv) * 3 + 2] = color[2];
+        var lum = dv[cv];  // 0 = darkest (least displaced), 1 = brightest (most displaced)
+        colors[(vOff + cv) * 3]     = lum;
+        colors[(vOff + cv) * 3 + 1] = lum;
+        colors[(vOff + cv) * 3 + 2] = lum;
       }
       for (var ii = 0; ii < quads[q].indices.length; ii++) {
         indices[iOff + ii] = quads[q].indices[ii] + vBase;
@@ -216,44 +204,35 @@
       iOff += quads[q].indices.length;
     }
 
-    // Compute smooth vertex normals
+    // Smooth vertex normals
     var i, i0, i1, i2;
     for (i = 0; i < indices.length; i += 3) {
-      i0 = indices[i]; i1 = indices[i + 1]; i2 = indices[i + 2];
+      i0 = indices[i]; i1 = indices[i+1]; i2 = indices[i+2];
       var ax = positions[i1*3]-positions[i0*3], ay = positions[i1*3+1]-positions[i0*3+1], az = positions[i1*3+2]-positions[i0*3+2];
       var bx = positions[i2*3]-positions[i0*3], by = positions[i2*3+1]-positions[i0*3+1], bz = positions[i2*3+2]-positions[i0*3+2];
-      var nx = ay*bz - az*by, ny = az*bx - ax*bz, nz = ax*by - ay*bx;
+      var nx = ay*bz-az*by, ny = az*bx-ax*bz, nz = ax*by-ay*bx;
       normals[i0*3]+=nx; normals[i0*3+1]+=ny; normals[i0*3+2]+=nz;
       normals[i1*3]+=nx; normals[i1*3+1]+=ny; normals[i1*3+2]+=nz;
       normals[i2*3]+=nx; normals[i2*3+1]+=ny; normals[i2*3+2]+=nz;
     }
     for (var nv = 0; nv < totalVerts; nv++) {
       var ox = normals[nv*3], oy = normals[nv*3+1], oz = normals[nv*3+2];
-      var len = Math.sqrt(ox*ox + oy*oy + oz*oz) || 1;
-      normals[nv*3] = ox/len; normals[nv*3+1] = oy/len; normals[nv*3+2] = oz/len;
+      var len = Math.sqrt(ox*ox+oy*oy+oz*oz) || 1;
+      normals[nv*3]=ox/len; normals[nv*3+1]=oy/len; normals[nv*3+2]=oz/len;
     }
 
-    // Triplanar UVs from final displaced world-space positions + computed normals
+    // Triplanar UVs for the grain overlay texture
     var invUV = 1.0 / uvScale;
     for (var vi = 0; vi < totalVerts; vi++) {
       var px = positions[vi*3], py = positions[vi*3+1], pz = positions[vi*3+2];
       var anx = Math.abs(normals[vi*3]), any = Math.abs(normals[vi*3+1]), anz = Math.abs(normals[vi*3+2]);
-      var u, v;
       if (any >= anx && any >= anz) {
-        // Horizontal face (floor / ceiling) → project onto XZ
-        u = px * invUV;
-        v = pz * invUV;
+        uvs[vi*2] = px * invUV; uvs[vi*2+1] = pz * invUV;
       } else if (anx >= anz) {
-        // X-facing wall → project onto ZY
-        u = pz * invUV;
-        v = py * invUV;
+        uvs[vi*2] = pz * invUV; uvs[vi*2+1] = py * invUV;
       } else {
-        // Z-facing wall → project onto XY
-        u = px * invUV;
-        v = py * invUV;
+        uvs[vi*2] = px * invUV; uvs[vi*2+1] = py * invUV;
       }
-      uvs[vi * 2]     = u;
-      uvs[vi * 2 + 1] = v;
     }
 
     var geo = new THREE.BufferGeometry();
@@ -280,8 +259,7 @@
     var wallAmp  = options.wallDisplacement != null ? options.wallDisplacement : 0.35;
     var ceilAmp  = options.ceilingDisplacement != null ? options.ceilingDisplacement : 0.25;
     var subd     = options.subdivisions != null ? options.subdivisions : 6;
-    var texSize  = options.textureSize != null ? options.textureSize : 512;
-    var uvScale  = options.uvScale != null ? options.uvScale : 3;  // world units per texture repeat
+    var uvScale  = options.uvScale != null ? options.uvScale : 2;
 
     var H = tiles.length;
     var W = tiles[0].length;
@@ -324,38 +302,35 @@
       }
     }
 
-    // Merge with triplanar UVs
-    var floorColor   = [0.45, 0.50, 0.40];
-    var ceilingColor = [0.38, 0.40, 0.46];
-    var wallColor    = [0.46, 0.44, 0.42];
+    // Merge — vertex colour = displacement luminance, no per-surface tint
+    var floorGeo   = mergeQuadsToGeometry(floorQuads, uvScale, THREE);
+    var ceilingGeo = mergeQuadsToGeometry(ceilingQuads, uvScale, THREE);
+    var wallGeo    = mergeQuadsToGeometry(wallQuads, uvScale, THREE);
 
-    var floorGeo   = mergeQuadsToGeometry(floorQuads, floorColor, uvScale, THREE);
-    var ceilingGeo = mergeQuadsToGeometry(ceilingQuads, ceilingColor, uvScale, THREE);
-    var wallGeo    = mergeQuadsToGeometry(wallQuads, wallColor, uvScale, THREE);
+    // Subtle grain overlay — random fine noise, mostly white with slight variation
+    var grainCanvas = generateGrainTexture(seed, 256);
+    var grainTex = new THREE.CanvasTexture(grainCanvas);
+    grainTex.wrapS = THREE.RepeatWrapping;
+    grainTex.wrapT = THREE.RepeatWrapping;
+    grainTex.magFilter = THREE.LinearFilter;
+    grainTex.minFilter = THREE.LinearMipmapLinearFilter;
+    grainTex.anisotropy = 4;
+    grainTex.needsUpdate = true;
 
-    // Generate stone texture (shared across all surfaces)
-    var stoneCanvas = generateStoneTexture(seed, texSize);
-    var stoneTex = new THREE.CanvasTexture(stoneCanvas);
-    stoneTex.wrapS = THREE.RepeatWrapping;
-    stoneTex.wrapT = THREE.RepeatWrapping;
-    stoneTex.magFilter = THREE.LinearFilter;
-    stoneTex.minFilter = THREE.LinearMipmapLinearFilter;
-    stoneTex.anisotropy = 4;
-    stoneTex.needsUpdate = true;
+    // All surfaces share the same base colour (white) — the vertex colour
+    // (displacement luminance) and grain map do all the visual work.
+    // vertexColors multiplies with map, so: final = vertexColor * grainTex
+    var sharedMatProps = {
+      map: grainTex,
+      vertexColors: true,
+      flatShading: false,
+      roughness: 0.9,
+      metalness: 0.02
+    };
 
-    // Materials — vertexColors tint the greyscale map texture
-    var floorMat = new THREE.MeshStandardMaterial({
-      map: stoneTex, vertexColors: true, roughness: 0.92, metalness: 0.02,
-      flatShading: false, side: THREE.FrontSide
-    });
-    var ceilingMat = new THREE.MeshStandardMaterial({
-      map: stoneTex, vertexColors: true, roughness: 0.88, metalness: 0.02,
-      flatShading: false, side: THREE.FrontSide
-    });
-    var wallMat = new THREE.MeshStandardMaterial({
-      map: stoneTex, vertexColors: true, roughness: 0.85, metalness: 0.04,
-      flatShading: false, side: THREE.DoubleSide
-    });
+    var floorMat   = new THREE.MeshStandardMaterial(Object.assign({}, sharedMatProps, { side: THREE.FrontSide }));
+    var ceilingMat = new THREE.MeshStandardMaterial(Object.assign({}, sharedMatProps, { side: THREE.FrontSide }));
+    var wallMat    = new THREE.MeshStandardMaterial(Object.assign({}, sharedMatProps, { side: THREE.DoubleSide }));
 
     var floorMesh   = new THREE.Mesh(floorGeo, floorMat);
     var ceilingMesh = new THREE.Mesh(ceilingGeo, ceilingMat);
@@ -367,7 +342,6 @@
     rootEl.appendChild(floorEl);
     floorEl.setObject3D('mesh', floorMesh);
 
-    // Ceiling + walls: visual only
     rootEl.object3D.add(ceilingMesh);
     rootEl.object3D.add(wallMesh);
 
