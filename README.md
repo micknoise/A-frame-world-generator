@@ -72,7 +72,11 @@ The **root** [`index.html`](index.html) uses **carve** (BSP + `carveFromBsp`). *
 - **Procedural canvas textures** (repeating noise) applied after two `requestAnimationFrame` ticks as `MeshStandardMaterial` on `data-wg-surf` (`floor` / `wall` / `ceiling` / `trim`).
 - **Displacement** (default on with tierA): floor/wall/ceiling boxes use **subdivided `BoxGeometry`** (up to 20 segments per axis, A-Frame’s cap) so `displacementMap` + **`displacementScale`** + **`displacementBias`** (`-0.5 * scale` so mid-grey is neutral) can subtly deform the mesh in the vertex shader. The height map is a **separate, smoothed** procedural texture (blur + upscale) so silhouettes stay organic without spikes. **Cannon colliders stay the original boxes** — only the rendered mesh is displaced. Trims skip displacement to save vertices.
 
-Options: **`displacement: false`** to keep PBR maps only; **`displacementScaleFloor` / `displacementScaleWall` / `displacementScaleCeiling`** override amplitudes (world units, typically ~0.02–0.06).
+The displacement texture is **centered on mid-grey** so `displacementBias = -0.5 × displacementScale` keeps the mesh near its original shape; an off-center map made the effect nearly invisible before.
+
+Albedo / roughness use **texture repeat below 1** so each procedural tile covers more world space (bigger, less “fine sand” look). Tune the `rep*` constants in `scheduleTierAMaterials` if you want even larger features.
+
+Options: **`displacement: false`** to keep PBR maps only; **`displacementScaleFloor` / `displacementScaleWall` / `displacementScaleCeiling`** override amplitudes (world units; defaults ~0.09–0.14 for visible undulation).
 
 Pass **`visualDetail: 'basic'`** to keep the older flat colors only (still merged geometry).
 

@@ -76,14 +76,15 @@
     ctx.putImageData(img, 0, 0);
     var tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(3, 3);
+    tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
   }
 
   /**
    * Low-frequency blurred heightfield for displacementMap (avoids harsh spikes on subdivided boxes).
-   * Neutral mid-grey ≈ 0.5 after bias so displacementScale controls amplitude around the surface.
+   * Pixel values are centered on 128 so (sample * displacementScale + bias) with bias = -0.5*scale
+   * keeps the surface near its original shape while allowing symmetric push/pull.
    */
   function makeDisplacementCanvasTexture(THREE, outSize, seed) {
     var rng = mulberry32(seed >>> 0);
@@ -131,7 +132,9 @@
         var v01 = b[y1][x0];
         var v11 = b[y1][x1];
         var v = v00 * (1 - tx) * (1 - ty) + v10 * tx * (1 - ty) + v01 * (1 - tx) * ty + v11 * tx * ty;
-        var byte = Math.floor(255 * (0.38 + 0.42 * v));
+        var byte = Math.floor(128 + (v - 0.5) * 118);
+        if (byte < 8) byte = 8;
+        if (byte > 247) byte = 247;
         var idx = (py * outSize + px) * 4;
         data[idx] = data[idx + 1] = data[idx + 2] = byte;
         data[idx + 3] = 255;
@@ -140,9 +143,23 @@
     ctx.putImageData(img, 0, 0);
     var tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(2.5, 2.5);
+    tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
+  }
+
+  /** Resolve mesh for Tier A material swap (some A-Frame builds nest the mesh). */
+  function getEntityMesh(el) {
+    var direct = el.getObject3D('mesh');
+    if (direct && direct.isMesh) return direct;
+    var found = null;
+    if (el.object3D) {
+      el.object3D.traverse(function (obj) {
+        if (found) return;
+        if (obj.isMesh) found = obj;
+      });
+    }
+    return found;
   }
 
   /** A-Frame box geometry is capped at 20 segments per axis (see geometry box schema). */
@@ -180,80 +197,119 @@
     var THREE = AFRAME.THREE;
     var seed = matOpts.seed != null ? matOpts.seed >>> 0 : 1;
     var useDisp = matOpts.displacement !== false;
-    var scF = matOpts.displacementScaleFloor != null ? matOpts.displacementScaleFloor : 0.042;
-    var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.028;
-    var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.034;
+    /* Defaults tuned so undulation reads at room scale (meters); reduce on low-end if needed. */
+    var scF = matOpts.displacementScaleFloor != null ? matOpts.displacementScaleFloor : 0.14;
+    var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.09;
+    var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.11;
+
+    /* repeat < 1 stretches one texture across more surface → larger, readable features */
+    var repFloorU = 0.48;
+    var repFloorV = 0.48;
+    var repWallU = 0.42;
+    var repWallV = 0.58;
+    var repCeilU = 0.5;
+    var repCeilV = 0.5;
+
+    var textureBundle = null;
+    function ensureTextureBundle() {
+      if (textureBundle) return textureBundle;
+      var texFloor = makeNoiseCanvasTexture(THREE, 128, seed ^ 0x243f6a88, 0.85);
+      var texWall = makeNoiseCanvasTexture(THREE, 128, (seed + 1) ^ 0x85a308d3, 0.7);
+      var texCeil = makeNoiseCanvasTexture(THREE, 128, (seed + 2) ^ 0x13198a2e, 0.55);
+      texFloor.repeat.set(repFloorU, repFloorV);
+      texWall.repeat.set(repWallU, repWallV);
+      texCeil.repeat.set(repCeilU, repCeilV);
+      [texFloor, texWall, texCeil].forEach(function (t) {
+        t.needsUpdate = true;
+      });
+      var dispFloor = useDisp ? makeDisplacementCanvasTexture(THREE, 128, seed ^ 0xdeadbeef) : null;
+      var dispWall = useDisp ? makeDisplacementCanvasTexture(THREE, 128, (seed + 3) ^ 0xcafebabe) : null;
+      var dispCeil = useDisp ? makeDisplacementCanvasTexture(THREE, 128, (seed + 5) ^ 0x0badf00d) : null;
+      if (dispFloor) {
+        dispFloor.repeat.set(repFloorU, repFloorV);
+        dispWall.repeat.set(repWallU, repWallV);
+        dispCeil.repeat.set(repCeilU, repCeilV);
+        [dispFloor, dispWall, dispCeil].forEach(function (t) {
+          t.needsUpdate = true;
+        });
+      }
+      textureBundle = {
+        texFloor: texFloor,
+        texWall: texWall,
+        texCeil: texCeil,
+        dispFloor: dispFloor,
+        dispWall: dispWall,
+        dispCeil: dispCeil
+      };
+      return textureBundle;
+    }
+
+    function disposeMaterial(mat) {
+      if (!mat) return;
+      if (Array.isArray(mat)) {
+        for (var i = 0; i < mat.length; i++) {
+          if (mat[i] && mat[i].dispose) mat[i].dispose();
+        }
+      } else if (mat.dispose) mat.dispose();
+    }
+
+    function applyTierAMaterialsToEntities() {
+      var b = ensureTextureBundle();
+      var nodes = rootEl.querySelectorAll('[data-wg-surf]');
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (el.getAttribute('data-wg-tier-a-mat') === '1') continue;
+        var kind = el.getAttribute('data-wg-surf');
+        var mesh = getEntityMesh(el);
+        if (!mesh) continue;
+
+        var map = kind === 'wall' || kind === 'trim' ? b.texWall : kind === 'ceiling' ? b.texCeil : b.texFloor;
+        var color =
+          kind === 'wall' || kind === 'trim'
+            ? 0xc5cdd4
+            : kind === 'ceiling'
+              ? 0xa8b8c8
+              : 0x8faa8e;
+        var rough = kind === 'wall' || kind === 'trim' ? 0.82 : kind === 'ceiling' ? 0.88 : 0.86;
+        var dispMap = null;
+        var dScale = 0;
+        var dBias = 0;
+        if (useDisp && kind !== 'trim') {
+          if (kind === 'floor') {
+            dispMap = b.dispFloor;
+            dScale = scF;
+          } else if (kind === 'ceiling') {
+            dispMap = b.dispCeil;
+            dScale = scC;
+          } else {
+            dispMap = b.dispWall;
+            dScale = scW;
+          }
+          dBias = -dScale * 0.5;
+        }
+        disposeMaterial(mesh.material);
+        var matParams = {
+          color: color,
+          map: map,
+          roughnessMap: map,
+          roughness: rough,
+          metalness: 0.06,
+          envMapIntensity: 0.45
+        };
+        if (dispMap && dScale > 0) {
+          matParams.displacementMap = dispMap;
+          matParams.displacementScale = dScale;
+          matParams.displacementBias = dBias;
+        }
+        mesh.material = new THREE.MeshStandardMaterial(matParams);
+        el.setAttribute('data-wg-tier-a-mat', '1');
+      }
+    }
 
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
-        var texFloor = makeNoiseCanvasTexture(THREE, 96, seed ^ 0x243f6a88, 0.85);
-        var texWall = makeNoiseCanvasTexture(THREE, 96, (seed + 1) ^ 0x85a308d3, 0.7);
-        var texCeil = makeNoiseCanvasTexture(THREE, 96, (seed + 2) ^ 0x13198a2e, 0.55);
-        texFloor.repeat.set(2.2, 2.2);
-        texWall.repeat.set(1.8, 2.4);
-        texCeil.repeat.set(2, 2);
-        [texFloor, texWall, texCeil].forEach(function (t) {
-          t.needsUpdate = true;
-        });
-
-        var dispFloor = useDisp ? makeDisplacementCanvasTexture(THREE, 112, seed ^ 0xdeadbeef) : null;
-        var dispWall = useDisp ? makeDisplacementCanvasTexture(THREE, 112, (seed + 3) ^ 0xcafebabe) : null;
-        var dispCeil = useDisp ? makeDisplacementCanvasTexture(THREE, 112, (seed + 5) ^ 0x0badf00d) : null;
-        if (dispFloor) {
-          dispFloor.repeat.set(2.2, 2.2);
-          dispWall.repeat.set(1.8, 2.4);
-          dispCeil.repeat.set(2, 2);
-          [dispFloor, dispWall, dispCeil].forEach(function (t) {
-            t.needsUpdate = true;
-          });
-        }
-
-        var nodes = rootEl.querySelectorAll('[data-wg-surf]');
-        for (var i = 0; i < nodes.length; i++) {
-          var el = nodes[i];
-          var kind = el.getAttribute('data-wg-surf');
-          var mesh = el.getObject3D('mesh');
-          if (!mesh || !mesh.material) continue;
-          var map = kind === 'wall' || kind === 'trim' ? texWall : kind === 'ceiling' ? texCeil : texFloor;
-          var color =
-            kind === 'wall' || kind === 'trim'
-              ? 0xc5cdd4
-              : kind === 'ceiling'
-                ? 0xa8b8c8
-                : 0x8faa8e;
-          var rough = kind === 'wall' || kind === 'trim' ? 0.82 : kind === 'ceiling' ? 0.88 : 0.86;
-          var dispMap = null;
-          var dScale = 0;
-          var dBias = 0;
-          if (useDisp && kind !== 'trim') {
-            if (kind === 'floor') {
-              dispMap = dispFloor;
-              dScale = scF;
-            } else if (kind === 'ceiling') {
-              dispMap = dispCeil;
-              dScale = scC;
-            } else {
-              dispMap = dispWall;
-              dScale = scW;
-            }
-            dBias = -dScale * 0.5;
-          }
-          mesh.material.dispose();
-          var matParams = {
-            color: color,
-            map: map,
-            roughnessMap: map,
-            roughness: rough,
-            metalness: 0.06,
-            envMapIntensity: 0.45
-          };
-          if (dispMap && dScale > 0) {
-            matParams.displacementMap = dispMap;
-            matParams.displacementScale = dScale;
-            matParams.displacementBias = dBias;
-          }
-          mesh.material = new THREE.MeshStandardMaterial(matParams);
-        }
+        applyTierAMaterialsToEntities();
+        setTimeout(applyTierAMaterialsToEntities, 120);
       });
     });
   }
