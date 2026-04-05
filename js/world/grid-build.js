@@ -26,7 +26,7 @@
  *   ceilingThickness, trimHeight, trimDepth — only used when visualDetail === 'tierA'.
  *   displacement — default true with tierA; set false to skip displacementMap (saves shader cost).
  *   displacementScaleFloor / displacementScaleWall / displacementScaleCeiling — world-unit amplitudes.
- *   textureTileMeters — approximate world size of one texture repeat (Tier A); default ~0.45 * cellSize.
+ *   textureTileMeters — world size of one full UV repeat (Tier A); default max(1, 1.2 * cellSize).
  *
  * PUBLIC API
  * ----------
@@ -105,7 +105,8 @@
    * Reads well under scene lights; normalMap gives visible relief even when displacement is subtle.
    */
   function makeTierSurfaceTextures(THREE, outSize, seed, surfaceKind) {
-    var n = 42;
+    /* Fewer grid cells → larger blobs per atlas tile; reads clearer when UV repeats are ~1m+. */
+    var n = 28;
     var hGrid = smoothHeightGrid(seed, n);
     var tint =
       surfaceKind === 'floor'
@@ -122,12 +123,12 @@
         var fx = (px / Math.max(1, outSize - 1)) * (n - 1);
         var fy = (py / Math.max(1, outSize - 1)) * (n - 1);
         var hBase = sampleHeightBilinear(hGrid, n, fx, fy);
-        var fxp = (fx * 3.15) % (n - 1);
-        var fyp = (fy * 3.15) % (n - 1);
+        var fxp = (fx * 2.6) % (n - 1);
+        var fyp = (fy * 2.6) % (n - 1);
         if (fxp < 0) fxp += n - 1;
         if (fyp < 0) fyp += n - 1;
         var hDet = sampleHeightBilinear(hGrid, n, fxp, fyp);
-        H[py * outSize + px] = hBase * 0.7 + hDet * 0.3;
+        H[py * outSize + px] = hBase * 0.85 + hDet * 0.15;
       }
     }
 
@@ -135,7 +136,7 @@
     var roughData = new Uint8ClampedArray(outSize * outSize * 4);
     var dispData = new Uint8ClampedArray(outSize * outSize * 4);
     var normData = new Uint8ClampedArray(outSize * outSize * 4);
-    var normalStrength = 22;
+    var normalStrength = 17;
 
     for (py = 0; py < outSize; py++) {
       for (px = 0; px < outSize; px++) {
@@ -330,8 +331,11 @@
     var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.26;
 
     var cellSize = matOpts.cellSize != null ? matOpts.cellSize : 1;
+    /* Default ~1.2m+ per repeat: previous 0.45*cell was visually tiny and busy on large surfaces. */
     var textureTileMeters =
-      matOpts.textureTileMeters != null ? matOpts.textureTileMeters : Math.max(0.12, cellSize * 0.45);
+      matOpts.textureTileMeters != null
+        ? matOpts.textureTileMeters
+        : Math.max(1, cellSize * 1.2);
 
     var textureBundle = null;
     function ensureTextureBundle() {
