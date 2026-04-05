@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>World-gen examples (BSP + ridge)</title>
+    <title>World-gen examples</title>
     <link rel="icon" href="data:," />
     <style>
       body {
@@ -22,6 +22,11 @@
       code {
         font-size: 0.95em;
       }
+      h2 {
+        margin-top: 2rem;
+        border-top: 1px solid #ddd;
+        padding-top: 1rem;
+      }
     </style>
   </head>
   <body>
@@ -32,6 +37,8 @@
       (BSP dungeon + ridge dungeon), combined for a-game / A-Frame 1.3 with vendored libs. Serve the
       <strong>repository root</strong> over HTTP and open paths below (not <code>file://</code>).
     </p>
+
+    <h2>Indoor / dungeon generators</h2>
     <ul>
       <li>
         <a href="world-maze/">Perfect maze</a> — recursive backtracker, BFS-farthest <strong>goal</strong>
@@ -50,6 +57,17 @@
         rectangles are forced open as anchor chambers.
       </li>
     </ul>
+
+    <h2>Outdoor / landscape generators</h2>
+    <ul>
+      <li>
+        <a href="world-noise-terrain/">Noise terrain</a> — layered value noise (fBm) with radial
+        island falloff generates a single high-resolution smooth mesh with per-vertex terrain
+        colouring (water → sand → grass → forest → hills → rock → snow) and a flat ocean plane.
+        All parameters adjustable in real time. Uses <code>js/world/noise-terrain.js</code>.
+      </li>
+    </ul>
+
     <p>
       Append <code>?seed=123</code> to any example URL to fix a layout. Main demo:
       <a href="../">repository root <code>index.html</code></a> (simple arena + crates).
