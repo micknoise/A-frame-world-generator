@@ -65,8 +65,9 @@
       </li>
       <li>
         <a href="world-noise-tube-dungeon/">BSP noise tube dungeon</a> — same BSP graph and the same
-        noise displacement and grain texturing as the noise dungeon, but rooms are sphere shells and
-        corridors are open tubes (L-shaped segments). Uses <code>js/world/noise-capsule-dungeon.js</code>
+        noise displacement and grain texturing as the noise dungeon, but each room is an ellipsoid
+        matched to that room’s floor rectangle and wall height, and corridors are open tubes on the
+        real <code>carveCorridor</code> paths. Uses <code>js/world/noise-capsule-dungeon.js</code>
         (<code>NoiseTubeDungeon.build</code>) + <code>js/world/bsp-dungeon.js</code>.
       </li>
       <li>

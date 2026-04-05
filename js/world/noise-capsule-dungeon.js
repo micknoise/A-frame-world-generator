@@ -1,11 +1,13 @@
 /**
- * noise-capsule-dungeon.js — BSP dungeon with sphere rooms and open cylindrical tube corridors
- * (no end caps, inward normals), using the same value-noise displacement rules and materials as noise-dungeon.js
- * (axis/triplanar fBm with offsets 0 / 100 / 200–300 / 400–500, grain texture, vertex luminance).
+ * noise-capsule-dungeon.js — BSP dungeon with axis-aligned ellipsoid rooms (squashed spheres that
+ * match each carved room box in XZ and wall height in Y) and open cylindrical tube corridors on the
+ * same corridorLegs as bsp-dungeon carveCorridor (no end caps, inward normals). Same displacement
+ * and materials as noise-dungeon.js (axis/triplanar fBm, grain, vertex luminance).
  *
  * PUBLIC API
  * ----------
  *   NoiseTubeDungeon.build(rootEl, bsp, options) → { spawnWorld }
+ *   Options include spawnFeetOffset (feet Y above the ellipsoid inner floor; default allows displacement).
  *   NoiseCapsuleDungeon — alias of NoiseTubeDungeon (legacy name)
  */
 (function () {
@@ -147,13 +149,17 @@
   }
 
   /**
-   * UV sphere centred at (cx,cy,cz), radius R.
-   * Winding matches sdf-cavern inward shells (normals point into the cavity).
+   * Axis-aligned ellipsoid shell (UV sphere mapped), centre (cx,cy,cz), semi-axes rx, ry, rz.
+   * Fits the BSP room box: half-width / half-depth from floor tile count, half-height from wall height.
+   * Winding: inward-facing cavity normals for FrontSide.
    */
-  function buildSphereMesh(cx, cy, cz, R, segH, segW) {
+  function buildEllipsoidMesh(cx, cy, cz, rx, ry, rz, segH, segW) {
     var positions = [];
     var indices = [];
     var iy, ix, v, phi, u, theta, sinPhi, cosPhi, sinT, cosT, px, py, pz;
+    var rx2 = rx * rx;
+    var ry2 = ry * ry;
+    var rz2 = rz * rz;
     for (iy = 0; iy <= segH; iy++) {
       v = iy / segH;
       phi = v * Math.PI;
@@ -164,9 +170,9 @@
         theta = u * Math.PI * 2;
         sinT = Math.sin(theta);
         cosT = Math.cos(theta);
-        px = cx + R * sinPhi * cosT;
-        py = cy + R * cosPhi;
-        pz = cz + R * sinPhi * sinT;
+        px = cx + rx * sinPhi * cosT;
+        py = cy + ry * cosPhi;
+        pz = cz + rz * sinPhi * sinT;
         positions.push(px, py, pz);
       }
     }
@@ -186,9 +192,9 @@
       indices: new Uint32Array(indices),
       vertCount: (segH + 1) * (segW + 1),
       normalAt: function (px, py, pz) {
-        var nx = cx - px;
-        var ny = cy - py;
-        var nz = cz - pz;
+        var nx = (cx - px) / rx2;
+        var ny = (cy - py) / ry2;
+        var nz = (cz - pz) / rz2;
         var ln = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
         return { x: nx / ln, y: ny / ln, z: nz / ln };
       }
@@ -436,8 +442,8 @@
     options = options || {};
 
     var seed = options.seed != null ? options.seed : 42;
-    var CS = options.cellSize != null ? options.cellSize : 3;
-    var WH = options.wallHeight != null ? options.wallHeight : 3.5;
+    var CS = options.cellSize != null ? options.cellSize : 4.5;
+    var WH = options.wallHeight != null ? options.wallHeight : 6;
     var nScale = options.noiseScale != null ? options.noiseScale : 0.4;
     var nOct = options.octaves != null ? options.octaves : 4;
     var floorAmp = options.floorDisplacement != null ? options.floorDisplacement : 0.12;
@@ -445,7 +451,10 @@
     var ceilAmp = options.ceilingDisplacement != null ? options.ceilingDisplacement : 0.25;
     var uvScale = options.uvScale != null ? options.uvScale : 2;
     var sphereSeg = options.sphereSegments != null ? options.sphereSegments : 32;
-    var capRadius = options.corridorRadius != null ? options.corridorRadius : CS * 0.48;
+    var roomInset = options.roomBoxInset != null ? options.roomBoxInset : 0.985;
+    var capRadius = options.corridorRadius != null ? options.corridorRadius : CS * 0.46;
+    var spawnFeetOffset =
+      options.spawnFeetOffset != null ? options.spawnFeetOffset : 1.15 + floorAmp + wallAmp * 0.35;
     var capAround =
       options.tubeAroundSegments != null
         ? options.tubeAroundSegments
@@ -466,7 +475,7 @@
     var H = bsp.height;
 
     var parts = [];
-    var ri, r, cx, cy, cz, rw, rh, R, rawSphere, rawTube, midY;
+    var ri, r, cx, cy, cz, rx, ry, rz, rawRoom, rawTube, midY;
     midY = WH * 0.5;
 
     for (ri = 0; ri < regions.length; ri++) {
@@ -474,17 +483,15 @@
       cx = (r.x + r.width * 0.5) * CS;
       cy = midY;
       cz = (r.y + r.height * 0.5) * CS;
-      rw = r.width * CS * 0.5;
-      rh = r.height * CS * 0.5;
-      /* Horizontal: nearly fill the carved floor rectangle; vertical: true half-height (not WH*0.48). */
-      var rVertCap = WH * 0.5 - 0.06;
-      var rHoriz = Math.min(rw, rh) * 0.98;
-      var rFloor = Math.min(capRadius * 1.35, rVertCap);
-      R = Math.min(rHoriz, rVertCap);
-      if (R < rFloor) R = rFloor;
-      if (R < CS * 0.35) R = CS * 0.35;
-      rawSphere = buildSphereMesh(cx, cy, cz, R, sphereSeg, sphereSeg);
-      var procS = processMesh(rawSphere, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
+      /* Same footprint as BSP floor rect: half-extents of the room box in world units, slightly inset. */
+      rx = r.width * CS * 0.5 * roomInset;
+      rz = r.height * CS * 0.5 * roomInset;
+      ry = WH * 0.5 * roomInset;
+      if (rx < CS * 0.18) rx = CS * 0.18;
+      if (rz < CS * 0.18) rz = CS * 0.18;
+      if (ry < CS * 0.15) ry = CS * 0.15;
+      rawRoom = buildEllipsoidMesh(cx, cy, cz, rx, ry, rz, sphereSeg, sphereSeg);
+      var procS = processMesh(rawRoom, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp);
       if (procS) parts.push(procS);
     }
 
@@ -524,8 +531,17 @@
     }
 
     if (!parts.length) {
-      rawSphere = buildSphereMesh((W * 0.5) * CS, midY, (H * 0.5) * CS, CS * 2, 24, 24);
-      parts.push(processMesh(rawSphere, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp));
+      rawRoom = buildEllipsoidMesh(
+        (W * 0.5) * CS,
+        midY,
+        (H * 0.5) * CS,
+        W * CS * 0.22,
+        WH * 0.45,
+        H * CS * 0.22,
+        24,
+        24
+      );
+      parts.push(processMesh(rawRoom, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp));
     }
 
     var geo = mergePartsToGeometry(parts, uvScale, THREE);
@@ -555,21 +571,24 @@
     rootEl.appendChild(floorEl);
     floorEl.setObject3D('mesh', mesh);
 
+    var rySpawn = WH * 0.5 * roomInset;
+    var spawnY = midY - rySpawn + spawnFeetOffset;
+    if (spawnY < 0.5) spawnY = 0.5;
     var spawnWorld;
     if (regions.length) {
       r = regions[0];
       spawnWorld = {
         x: (r.x + r.width * 0.5) * CS,
-        y: 0.25,
+        y: spawnY,
         z: (r.y + r.height * 0.5) * CS
       };
     } else {
-      spawnWorld = { x: (W * 0.5) * CS, y: 0.25, z: (H * 0.5) * CS };
+      spawnWorld = { x: (W * 0.5) * CS, y: spawnY, z: (H * 0.5) * CS };
     }
 
     var startMarker = document.createElement('a-box');
     startMarker.setAttribute('start', '');
-    startMarker.setAttribute('position', spawnWorld.x + ' 0.01 ' + spawnWorld.z);
+    startMarker.setAttribute('position', spawnWorld.x + ' ' + spawnY + ' ' + spawnWorld.z);
     startMarker.setAttribute('width', '0.02');
     startMarker.setAttribute('height', '0.02');
     startMarker.setAttribute('depth', '0.02');

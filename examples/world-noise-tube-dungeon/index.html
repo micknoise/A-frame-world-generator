@@ -164,8 +164,8 @@
 
         var out = NoiseTubeDungeon.build(root, bsp, {
           seed: seed,
-          cellSize: 3,
-          wallHeight: 4.5,
+          cellSize: 5,
+          wallHeight: 6.5,
           noiseScale: parseFloat(document.getElementById('noiseScale').value),
           octaves: 4,
           floorDisplacement: parseFloat(document.getElementById('floorDisp').value),
@@ -174,8 +174,15 @@
         });
 
         var player = document.getElementById('player');
-        player.setAttribute('position',
-          out.spawnWorld.x + ' ' + out.spawnWorld.y + ' ' + out.spawnWorld.z);
+        var px = out.spawnWorld.x + ' ' + out.spawnWorld.y + ' ' + out.spawnWorld.z;
+        player.setAttribute('position', px);
+        /* Re-apply after physics so the body isn’t left intersecting the new hull on first tick. */
+        requestAnimationFrame(function () {
+          player.setAttribute('position', px);
+        });
+        setTimeout(function () {
+          player.setAttribute('position', px);
+        }, 50);
 
         var cam = player.querySelector('[camera], a-camera');
         if (cam) {
