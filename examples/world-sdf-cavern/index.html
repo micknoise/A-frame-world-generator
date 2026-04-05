@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SDF cavern — marching cubes + domain warp</title>
+    <title>SDF cavern — sphere + tube mesh with domain warp</title>
     <link rel="icon" href="data:," />
     <script>
       window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
@@ -59,17 +59,17 @@
       </div>
       <div style="margin-bottom:6px;">
         <label style="display:flex; justify-content:space-between; align-items:center;">
-          Smooth K <input type="range" id="smoothK" min="0.5" max="5" step="0.1" value="2.0" style="width:120px; accent-color:#66bb6a;"><span id="smoothKVal">2.0</span>
+          Tunnel Radius <input type="range" id="corrRadius" min="0.8" max="4" step="0.1" value="1.8" style="width:120px; accent-color:#66bb6a;"><span id="corrRadiusVal">1.8</span>
         </label>
       </div>
       <div style="margin-bottom:6px;">
         <label style="display:flex; justify-content:space-between; align-items:center;">
-          Tunnel Radius <input type="range" id="corrRadius" min="0.8" max="3" step="0.1" value="1.8" style="width:120px; accent-color:#66bb6a;"><span id="corrRadiusVal">1.8</span>
+          Sphere Detail <input type="range" id="sphereSegs" min="8" max="32" step="2" value="16" style="width:120px; accent-color:#66bb6a;"><span id="sphereSegsVal">16</span>
         </label>
       </div>
       <div style="margin-bottom:6px;">
         <label style="display:flex; justify-content:space-between; align-items:center;">
-          Voxel Size <input type="range" id="voxRes" min="0.3" max="1.2" step="0.05" value="0.5" style="width:120px; accent-color:#66bb6a;"><span id="voxResVal">0.5</span>
+          Tube Detail <input type="range" id="tubeSegs" min="6" max="16" step="1" value="8" style="width:120px; accent-color:#66bb6a;"><span id="tubeSegsVal">8</span>
         </label>
       </div>
       <button id="generateBtn" style="
@@ -77,10 +77,9 @@
         background:#2e7d32; color:#e8f5e9; border:none;
         border-radius:6px; cursor:pointer; font-family:inherit;
         font-size:13px; letter-spacing:0.3px;
-      ">&#9654; Generate (may take a moment)</button>
+      ">&#9654; Regenerate</button>
       <div style="font-size:11px; color:#81c784; margin-top:8px; opacity:0.65;">
-        WASD to move · Click to capture · Esc to release · ?seed=N in URL<br>
-        Lower voxel size = smoother but slower generation.
+        WASD to move · Click to capture · Esc to release · ?seed=N in URL
       </div>
     </div>
 
@@ -119,7 +118,7 @@
         cam.setAttribute('look-controls', { pointerLockEnabled: false, touchEnabled: false });
       }
 
-      ['warpAmp', 'warpScale', 'smoothK', 'corrRadius', 'voxRes'].forEach(function (id) {
+      ['warpAmp', 'warpScale', 'corrRadius', 'sphereSegs', 'tubeSegs'].forEach(function (id) {
         var el = document.getElementById(id);
         var val = document.getElementById(id + 'Val');
         el.addEventListener('input', function () { val.textContent = el.value; });
@@ -146,16 +145,12 @@
       function buildWorld() {
         clearWorldRoot();
         var root = document.getElementById('world-root');
-
         var seed  = parseInt(document.getElementById('seed').value, 10) || 1;
         var gridW = parseInt(document.getElementById('gridW').value, 10) || 32;
         var gridH = parseInt(document.getElementById('gridH').value, 10) || 28;
 
         var bsp = generateBspDungeon(seed, {
-          width: gridW,
-          height: gridH,
-          minLeafSize: 6,
-          maxDepth: 3
+          width: gridW, height: gridH, minLeafSize: 6, maxDepth: 3
         });
 
         var out = SDFCavern.build(root, bsp, {
@@ -164,9 +159,9 @@
           wallHeight: 4,
           warpScale: parseFloat(document.getElementById('warpScale').value),
           warpAmp: parseFloat(document.getElementById('warpAmp').value),
-          smoothK: parseFloat(document.getElementById('smoothK').value),
           corridorRadius: parseFloat(document.getElementById('corrRadius').value),
-          voxelResolution: parseFloat(document.getElementById('voxRes').value)
+          sphereSegments: parseInt(document.getElementById('sphereSegs').value, 10),
+          tubeSegments: parseInt(document.getElementById('tubeSegs').value, 10)
         });
 
         var player = document.getElementById('player');
@@ -188,20 +183,15 @@
           refreshRaycasters(sceneEl);
           setTimeout(function () { refreshRaycasters(sceneEl); }, 120);
           requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              relaxPointerLockOnCamera(sceneEl);
-            });
+            requestAnimationFrame(function () { relaxPointerLockOnCamera(sceneEl); });
           });
         });
       }
 
       document.getElementById('generateBtn').addEventListener('click', buildWorld);
-
       sceneEl.addEventListener('loaded', function () {
         requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            buildWorld();
-          });
+          requestAnimationFrame(function () { buildWorld(); });
         });
       }, { once: true });
     </script>
