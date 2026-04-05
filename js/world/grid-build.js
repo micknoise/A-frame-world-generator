@@ -12,30 +12,21 @@
  *   - <a-box start> — invisible marker at spawn (a-game spawn / navigation helpers).
  *   - <a-box floor> — horizontal runs of adjacent floor cells merged per row → fewer entities.
  *   - <a-box wall> — horizontal runs of adjacent wall cells merged per row, full wallHeight.
+ *   - Optional goal marker (visible emissive box) when goalTile is set (mazes).
+ *   - visualDetail 'tierA': ceiling slabs, baseboard trims, procedural noise textures on meshes.
  *   - Static purple platform + three small dynamic grabbable cubes near spawn (optional).
  *   - Scattered dynamic crates on random floor cells (seeded).
  *
- * WORLD SPACE
- * -----------
- *   cellSize (default 1) — one tile = cellSize meters in X and Z.
- *   Tile (tx, tz) cell center: ((tx+0.5)*cellSize, 0, (tz+0.5)*cellSize) with tz = row index y.
- *   Floor boxes sit with their top near y=0; walls rise from y=0 to wallHeight.
+ * OPTIONS
+ * -------
+ *   visualDetail: 'basic' | 'tierA' (default 'tierA') — Tier A adds ceiling, trims, MeshStandardMaterial
+ *     with repeating canvas noise (roughness/detail) after a short rAF delay once meshes exist.
+ *   goalTile: { x, y } — floor tile for a visible “exit” pillar (no floor/wall tag; cosmetic).
+ *   ceilingThickness, trimHeight, trimDepth — only used when visualDetail === 'tierA'.
  *
  * PUBLIC API
  * ----------
- *   buildAgameTileWorld(rootEl, tiles, options?)
- *     options:
- *       cellSize, wallHeight, floorThickness — geometry scale
- *       markerTile: { x, y } — tile coords for spawn; if not floor, falls back to first floor tile
- *       seed — crate / color RNG (mulberry32)
- *       includeToys — default true (platform + grabbables)
- *       crateCount — default 10
- *     returns { spawnWorld: {x,y,z}, gridW, gridH, markerTile }
- *
- * PERFORMANCE
- * -----------
- * Merging runs along each row reduces entity count vs one box per tile; very large grids still cost
- * physics — tune GRID_W/H in generator.js or lower crateCount for VR.
+ *   buildAgameTileWorld(rootEl, tiles, options?) — see generator.js / README.
  */
 (function () {
   'use strict';
@@ -64,7 +55,69 @@
     return '#' + n.toString(16).padStart(6, '0');
   }
 
-  /** Static plinth + grab toys slightly in front of spawn (-Z) for immediate physics play. */
+  /** Canvas grayscale noise for MeshStandardMaterial map + roughnessMap (Tier A). */
+  function makeNoiseCanvasTexture(THREE, size, seed, contrast) {
+    contrast = contrast == null ? 0.75 : contrast;
+    var rng = mulberry32(seed >>> 0);
+    var canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(size, size);
+    var d = img.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var t = rng();
+      var v = Math.floor(255 * (0.35 + contrast * t * 0.55));
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(3, 3);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  /** After A-Frame creates meshes, swap to PBR materials with procedural repeat. */
+  function scheduleTierAMaterials(rootEl, seed) {
+    if (!window.AFRAME || !AFRAME.THREE) return;
+    var THREE = AFRAME.THREE;
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        var texFloor = makeNoiseCanvasTexture(THREE, 96, seed ^ 0x243f6a88, 0.85);
+        var texWall = makeNoiseCanvasTexture(THREE, 96, (seed + 1) ^ 0x85a308d3, 0.7);
+        var texCeil = makeNoiseCanvasTexture(THREE, 96, (seed + 2) ^ 0x13198a2e, 0.55);
+        texFloor.repeat.set(2.2, 2.2);
+        texWall.repeat.set(1.8, 2.4);
+        texCeil.repeat.set(2, 2);
+        [texFloor, texWall, texCeil].forEach(function (t) {
+          t.needsUpdate = true;
+        });
+
+        var nodes = rootEl.querySelectorAll('[data-wg-surf]');
+        for (var i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          var kind = el.getAttribute('data-wg-surf');
+          var mesh = el.getObject3D('mesh');
+          if (!mesh || !mesh.material) continue;
+          var map = kind === 'wall' ? texWall : kind === 'ceiling' ? texCeil : texFloor;
+          var color =
+            kind === 'wall' ? 0xc5cdd4 : kind === 'ceiling' ? 0xa8b8c8 : 0x8faa8e;
+          var rough = kind === 'wall' ? 0.82 : kind === 'ceiling' ? 0.88 : 0.86;
+          mesh.material.dispose();
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: color,
+            map: map,
+            roughnessMap: map,
+            roughness: rough,
+            metalness: 0.06,
+            envMapIntensity: 0.45
+          });
+        }
+      });
+    });
+  }
+
   function appendSpawnPhysicsToys(rootEl, worldX, worldZ) {
     var platform = document.createElement('a-box');
     platform.setAttribute('position', worldX + ' 0.25 ' + (worldZ - 2));
@@ -75,8 +128,7 @@
     platform.setAttribute('body', 'type: static; mass: 5');
     rootEl.appendChild(platform);
 
-    var half = 0.11;
-    var topY = 0.25 + 0.25 + half;
+    var topY = 0.25 + 0.25 + 0.11;
     var toys = [
       { dx: -0.4, dz: 0 },
       { dx: 0, dz: 0 },
@@ -97,6 +149,134 @@
     }
   }
 
+  function appendGoalMarker(rootEl, gt, cellSize, floorThickness) {
+    var gx = (gt.x + 0.5) * cellSize;
+    var gz = (gt.y + 0.5) * cellSize;
+    var pillarH = Math.min(0.95, cellSize * 0.9);
+    var baseY = floorThickness + pillarH / 2;
+    var goal = document.createElement('a-box');
+    goal.setAttribute('data-wg-goal', '');
+    goal.setAttribute('position', gx + ' ' + baseY + ' ' + gz);
+    goal.setAttribute('width', (cellSize * 0.38).toFixed(3));
+    goal.setAttribute('height', pillarH.toFixed(3));
+    goal.setAttribute('depth', (cellSize * 0.38).toFixed(3));
+    goal.setAttribute(
+      'material',
+      'color: #ffb24a; emissive: #cc6600; emissiveIntensity: 0.5; roughness: 0.4; metalness: 0.2'
+    );
+    rootEl.appendChild(goal);
+  }
+
+  /**
+   * Baseboard / trim along floor edges where the neighbor cell is wall (Tier A).
+   */
+  function appendTrims(rootEl, tiles, W, H, cellSize, trimH, trimD, tierA) {
+    var y;
+    var x;
+    /* North edge of row y (toward smaller z): neighbor row y - 1 is wall. */
+    for (y = 0; y < H; y++) {
+      x = 0;
+      while (x < W) {
+        var northWall = y === 0 || tiles[y - 1][x] === 'wall';
+        if (tiles[y][x] !== 'floor' || !northWall) {
+          x++;
+          continue;
+        }
+        var x0 = x;
+        while (x < W && tiles[y][x] === 'floor' && (y === 0 || tiles[y - 1][x] === 'wall')) x++;
+        var run = x - x0;
+        var widthW = run * cellSize;
+        var cx = x0 * cellSize + widthW / 2;
+        var cz = y * cellSize + trimD / 2;
+        var tr = document.createElement('a-box');
+        tr.setAttribute('width', String(widthW));
+        tr.setAttribute('height', String(trimH));
+        tr.setAttribute('depth', String(trimD));
+        tr.setAttribute('position', cx + ' ' + trimH / 2 + ' ' + cz);
+        if (tierA) tr.setAttribute('data-wg-surf', 'wall');
+        else tr.setAttribute('color', '#4a5560');
+        tr.setAttribute('shadow', 'cast: false; receive: true');
+        rootEl.appendChild(tr);
+      }
+    }
+    /* South edge of row y: neighbor y + 1 is wall. */
+    for (y = 0; y < H; y++) {
+      x = 0;
+      while (x < W) {
+        var southWall = y === H - 1 || tiles[y + 1][x] === 'wall';
+        if (tiles[y][x] !== 'floor' || !southWall) {
+          x++;
+          continue;
+        }
+        var x0s = x;
+        while (x < W && tiles[y][x] === 'floor' && (y === H - 1 || tiles[y + 1][x] === 'wall')) x++;
+        var runs = x - x0s;
+        var wW = runs * cellSize;
+        var cxs = x0s * cellSize + wW / 2;
+        var czs = (y + 1) * cellSize - trimD / 2;
+        var trs = document.createElement('a-box');
+        trs.setAttribute('width', String(wW));
+        trs.setAttribute('height', String(trimH));
+        trs.setAttribute('depth', String(trimD));
+        trs.setAttribute('position', cxs + ' ' + trimH / 2 + ' ' + czs);
+        if (tierA) trs.setAttribute('data-wg-surf', 'wall');
+        else trs.setAttribute('color', '#4a5560');
+        trs.setAttribute('shadow', 'cast: false; receive: true');
+        rootEl.appendChild(trs);
+      }
+    }
+    /* East trim: wall at x + 1, merged along z. */
+    for (x = 0; x < W; x++) {
+      y = 0;
+      while (y < H) {
+        var eastWall = x === W - 1 || tiles[y][x + 1] === 'wall';
+        if (tiles[y][x] !== 'floor' || !eastWall) {
+          y++;
+          continue;
+        }
+        var y0e = y;
+        while (y < H && tiles[y][x] === 'floor' && (x === W - 1 || tiles[y][x + 1] === 'wall')) y++;
+        var runH = (y - y0e) * cellSize;
+        var cxe = (x + 1) * cellSize - trimD / 2;
+        var cze = y0e * cellSize + runH / 2;
+        var tre = document.createElement('a-box');
+        tre.setAttribute('width', String(trimD));
+        tre.setAttribute('height', String(trimH));
+        tre.setAttribute('depth', String(runH));
+        tre.setAttribute('position', cxe + ' ' + trimH / 2 + ' ' + cze);
+        if (tierA) tre.setAttribute('data-wg-surf', 'wall');
+        else tre.setAttribute('color', '#4a5560');
+        tre.setAttribute('shadow', 'cast: false; receive: true');
+        rootEl.appendChild(tre);
+      }
+    }
+    /* West trim: wall at x - 1. */
+    for (x = 0; x < W; x++) {
+      y = 0;
+      while (y < H) {
+        var westWall = x === 0 || tiles[y][x - 1] === 'wall';
+        if (tiles[y][x] !== 'floor' || !westWall) {
+          y++;
+          continue;
+        }
+        var y0w = y;
+        while (y < H && tiles[y][x] === 'floor' && (x === 0 || tiles[y][x - 1] === 'wall')) y++;
+        var runHw = (y - y0w) * cellSize;
+        var cxw = x * cellSize + trimD / 2;
+        var czw = y0w * cellSize + runHw / 2;
+        var trw = document.createElement('a-box');
+        trw.setAttribute('width', String(trimD));
+        trw.setAttribute('height', String(trimH));
+        trw.setAttribute('depth', String(runHw));
+        trw.setAttribute('position', cxw + ' ' + trimH / 2 + ' ' + czw);
+        if (tierA) trw.setAttribute('data-wg-surf', 'wall');
+        else trw.setAttribute('color', '#4a5560');
+        trw.setAttribute('shadow', 'cast: false; receive: true');
+        rootEl.appendChild(trw);
+      }
+    }
+  }
+
   /**
    * @param {HTMLElement} rootEl
    * @param {string[][]} tiles row-major: tiles[y][x]
@@ -104,21 +284,31 @@
    *   cellSize?: number,
    *   wallHeight?: number,
    *   floorThickness?: number,
+   *   ceilingThickness?: number,
+   *   trimHeight?: number,
+   *   trimDepth?: number,
    *   markerTile?: {x:number,y:number},
+   *   goalTile?: {x:number,y:number},
    *   seed?: number,
    *   includeToys?: boolean,
-   *   crateCount?: number
+   *   crateCount?: number,
+   *   visualDetail?: 'basic' | 'tierA'
    * }} [options]
-   * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number, markerTile: {x:number,y:number} }}
+   * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number, markerTile: {x:number,y:number}, goalTile?: {x:number,y:number} }}
    */
   function buildAgameTileWorld(rootEl, tiles, options) {
     options = options || {};
     var cellSize = options.cellSize != null ? options.cellSize : 1;
     var wallHeight = options.wallHeight != null ? options.wallHeight : 3;
     var floorThickness = options.floorThickness != null ? options.floorThickness : 0.25;
+    var ceilingThickness = options.ceilingThickness != null ? options.ceilingThickness : 0.12;
+    var trimH = options.trimHeight != null ? options.trimHeight : 0.14;
+    var trimD = options.trimDepth != null ? options.trimDepth : 0.07;
     var seed = options.seed != null ? options.seed >>> 0 : 1;
     var includeToys = options.includeToys !== false;
     var crateCount = options.crateCount != null ? options.crateCount : 10;
+    var visualDetail = options.visualDetail != null ? options.visualDetail : 'tierA';
+    var tierA = visualDetail === 'tierA';
 
     var H = tiles.length;
     var W = tiles[0].length;
@@ -141,8 +331,8 @@
     rootEl.appendChild(start);
 
     var floorY = -floorThickness / 2;
+    var ceilY = wallHeight - ceilingThickness / 2;
 
-    /* One merged box per maximal horizontal run of floor cells in each row. */
     for (var y = 0; y < H; y++) {
       var x = 0;
       while (x < W) {
@@ -158,16 +348,33 @@
         var cz = y * cellSize + cellSize / 2;
         var fb = document.createElement('a-box');
         fb.setAttribute('floor', '');
-        fb.setAttribute('color', '#5c6b5c');
+        if (tierA) {
+          fb.setAttribute('data-wg-surf', 'floor');
+          fb.setAttribute('material', 'color: #8faa8e; roughness: 0.9; metalness: 0.04');
+        } else {
+          fb.setAttribute('color', '#5c6b5c');
+        }
         fb.setAttribute('width', String(widthW));
         fb.setAttribute('height', String(floorThickness));
         fb.setAttribute('depth', String(cellSize));
         fb.setAttribute('position', cx + ' ' + floorY + ' ' + cz);
+        fb.setAttribute('shadow', 'receive: true');
         rootEl.appendChild(fb);
+
+        if (tierA) {
+          var cb = document.createElement('a-box');
+          cb.setAttribute('data-wg-surf', 'ceiling');
+          cb.setAttribute('material', 'color: #a8b8c8; roughness: 0.92; metalness: 0.05');
+          cb.setAttribute('width', String(widthW));
+          cb.setAttribute('height', String(ceilingThickness));
+          cb.setAttribute('depth', String(cellSize));
+          cb.setAttribute('position', cx + ' ' + ceilY + ' ' + cz);
+          cb.setAttribute('shadow', 'cast: true; receive: false');
+          rootEl.appendChild(cb);
+        }
       }
     }
 
-    /* Same run-length idea for walls — tall boxes centered at wallHeight/2. */
     for (var wy = 0; wy < H; wy++) {
       var wx = 0;
       while (wx < W) {
@@ -183,12 +390,29 @@
         var wcz = wy * cellSize + cellSize / 2;
         var wb = document.createElement('a-box');
         wb.setAttribute('wall', '');
-        wb.setAttribute('color', '#3d4a4f');
+        if (tierA) {
+          wb.setAttribute('data-wg-surf', 'wall');
+          wb.setAttribute('material', 'color: #c5cdd4; roughness: 0.85; metalness: 0.06');
+        } else {
+          wb.setAttribute('color', '#3d4a4f');
+        }
         wb.setAttribute('width', String(wWidth));
         wb.setAttribute('height', String(wallHeight));
         wb.setAttribute('depth', String(cellSize));
         wb.setAttribute('position', wcx + ' ' + wallHeight / 2 + ' ' + wcz);
+        wb.setAttribute('shadow', 'cast: true; receive: true');
         rootEl.appendChild(wb);
+      }
+    }
+
+    if (tierA) appendTrims(rootEl, tiles, W, H, cellSize, trimH, trimD, tierA);
+
+    var outGoal = null;
+    if (options.goalTile) {
+      var g = options.goalTile;
+      if (g.y >= 0 && g.y < H && g.x >= 0 && g.x < W && tiles[g.y][g.x] === 'floor') {
+        appendGoalMarker(rootEl, g, cellSize, floorThickness);
+        outGoal = { x: g.x, y: g.y };
       }
     }
 
@@ -201,6 +425,7 @@
       var ty = Math.floor(rng() * H);
       if (tiles[ty][tx] !== 'floor') continue;
       if (Math.abs(tx - mt.x) < margin && Math.abs(ty - mt.y) < margin) continue;
+      if (outGoal && Math.abs(tx - outGoal.x) < margin && Math.abs(ty - outGoal.y) < margin) continue;
 
       var wxp = (tx + 0.5) * cellSize;
       var wzp = (ty + 0.5) * cellSize;
@@ -219,7 +444,16 @@
       rootEl.appendChild(crate);
     }
 
-    return { spawnWorld: spawnWorld, gridW: W, gridH: H, markerTile: mt };
+    if (tierA) scheduleTierAMaterials(rootEl, seed);
+
+    var result = {
+      spawnWorld: spawnWorld,
+      gridW: W,
+      gridH: H,
+      markerTile: mt
+    };
+    if (outGoal) result.goalTile = outGoal;
+    return result;
   }
 
   window.buildAgameTileWorld = buildAgameTileWorld;

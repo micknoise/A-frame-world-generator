@@ -25,6 +25,7 @@ const required = [
   'js/world/ridge-field.js',
   'js/world/combine-bsp-ridge.js',
   'js/world/grid-build.js',
+  'js/world/maze.js',
   ...AFRAME_13_CDN_PATHS.map((p) => join('libs/aframe-cdn', p))
 ];
 

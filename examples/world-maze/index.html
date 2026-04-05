@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Perfect maze — start &amp; goal (a-game)</title>
+    <link rel="icon" href="data:," />
+    <script>
+      window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
+    </script>
+    <script src="../../js/aframe-cdn-rewrite.js"></script>
+    <script src="../../libs/aframe/aframe-v1.3.0.min.js"></script>
+    <script>
+      if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
+        delete AFRAME.components.grabbable;
+      }
+    </script>
+    <script src="../../libs/a-game/a-game.min.js"></script>
+    <script src="../../js/world/maze.js"></script>
+    <script src="../../js/world/grid-build.js"></script>
+  </head>
+  <body>
+    <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
+    <a-scene
+      id="scene"
+      physics="workerUrl: ../../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
+      loading-screen="enabled: false"
+    >
+      <a-assets></a-assets>
+      <a-light type="ambient" color="#eef2f5" intensity="0.42"></a-light>
+      <a-light type="directional" color="#ffe8d0" intensity="0.6" position="4 12 8"></a-light>
+      <a-sky color="#121820"></a-sky>
+      <a-entity id="world-root"></a-entity>
+      <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
+    </a-scene>
+
+    <script>
+      window.addEventListener('unhandledrejection', function (event) {
+        var name = event.reason && event.reason.name;
+        var msg = String((event.reason && event.reason.message) || event.reason || '');
+        if (name === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1) {
+          event.preventDefault();
+        }
+      });
+
+      function refreshRaycasters(rootScene) {
+        var nodes = rootScene.querySelectorAll('[raycaster]');
+        for (var i = 0; i < nodes.length; i++) {
+          var rc = nodes[i].components && nodes[i].components.raycaster;
+          if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
+        }
+      }
+
+      function relaxPointerLockOnCamera(rootScene) {
+        var cam = rootScene.querySelector('a-camera');
+        if (!cam) return;
+        cam.setAttribute('look-controls', { pointerLockEnabled: false, touchEnabled: false });
+      }
+
+      var scene = document.getElementById('scene');
+      var seed = 1;
+      var q = new URLSearchParams(location.search).get('seed');
+      if (q != null) seed = parseInt(q, 10) || 1;
+
+      /*
+        Recursive backtracker maze (odd dimensions). Start at tile (1,1). Goal = farthest floor cell
+        from start by BFS (longest shortest path). Orange pillar marks goal via buildAgameTileWorld goalTile.
+        Toys off: spawn is tight to the corner; a plinth would often sit in a wall.
+      */
+      scene.addEventListener(
+        'loaded',
+        function () {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              var root = document.getElementById('world-root');
+              var maze = generateMaze(seed, { width: 33, height: 27 });
+              var ms = maze.markers[0];
+              var mg = maze.markers[1];
+              var out = buildAgameTileWorld(root, maze.tiles, {
+                markerTile: { x: ms.x, y: ms.y },
+                goalTile: { x: mg.x, y: mg.y },
+                seed: seed,
+                includeToys: false,
+                crateCount: 5,
+                visualDetail: 'tierA'
+              });
+              document.getElementById('player').setAttribute(
+                'position',
+                out.spawnWorld.x + ' 0 ' + out.spawnWorld.z
+              );
+              requestAnimationFrame(function () {
+                refreshRaycasters(scene);
+                setTimeout(function () {
+                  refreshRaycasters(scene);
+                }, 120);
+                requestAnimationFrame(function () {
+                  requestAnimationFrame(function () {
+                    relaxPointerLockOnCamera(scene);
+                  });
+                });
+              });
+            });
+          });
+        },
+        { once: true }
+      );
+    </script>
+  </body>
+</html>

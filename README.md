@@ -17,7 +17,7 @@ python3 -m http.server 8080
 |-----|------|
 | [http://localhost:8080/](http://localhost:8080/) | Main procedural dungeon (`index.html`) |
 | [http://localhost:8080/?seed=42](http://localhost:8080/?seed=42) | Same with fixed seed |
-| [http://localhost:8080/examples/](http://localhost:8080/examples/) | Other BSP + ridge combinations |
+| [http://localhost:8080/examples/](http://localhost:8080/examples/) | Maze, BSP + ridge combinations |
 | [http://localhost:8080/glb-room/](http://localhost:8080/glb-room/) | GLB room demo (shared `libs/`) |
 
 **Do not open `index.html` via `file://`.** Relative URLs and the Cannon worker must be same-origin HTTP.
@@ -54,11 +54,26 @@ seed
   │     e.g. roomsInRidge: ridge base + BSP room rectangles stamped in
   │
   └─► buildAgameTileWorld(rootEl, tiles, options)
-        Merge horizontal runs of floor/wall → fewer boxes; spawn + crates + toys
-        Returns { spawnWorld, gridW, gridH, markerTile }
+        Merge horizontal runs of floor/wall; optional ceiling, trims, procedural PBR textures (Tier A);
+        spawn + crates + toys; optional goal pillar (mazes)
+        Returns { spawnWorld, gridW, gridH, markerTile, goalTile? }
 ```
 
-The **root** [`index.html`](index.html) uses **carve** (BSP + `carveFromBsp`). **[`examples/`](examples/)** pages document **union** and **rooms-in-ridge** with inline comments.
+**Alternate source:** [`generateMaze(seed, opts)`](js/world/maze.js) — perfect maze (recursive backtracker), `markers` with `start` and `goal` where **goal** is the **BFS-farthest** floor tile from start. Feed the same `tiles` into `buildAgameTileWorld` with `goalTile` set from that marker. Example: [`examples/world-maze/`](examples/world-maze/).
+
+The **root** [`index.html`](index.html) uses **carve** (BSP + `carveFromBsp`). **[`examples/`](examples/)** pages document **maze**, **union**, and **rooms-in-ridge** with inline comments.
+
+### Visual detail (Tier A vs basic)
+
+[`buildAgameTileWorld`](js/world/grid-build.js) defaults to **`visualDetail: 'tierA'`**:
+
+- **Ceiling** slabs aligned with merged floor runs (same XZ footprint, at `wallHeight`).
+- **Baseboard trims** on floor↔wall edges (merged segments; cosmetic, no `floor`/`wall` tags).
+- **Procedural canvas textures** (repeating noise) applied after two `requestAnimationFrame` ticks as `MeshStandardMaterial` on elements tagged `data-wg-surf` (`floor` / `wall` / `ceiling`).
+
+Pass **`visualDetail: 'basic'`** to keep the older flat colors only (still merged geometry).
+
+**`goalTile: { x, y }`** — if set and that tile is `floor`, spawns a visible **emissive pillar** at the cell center (no physics body). Use with `generateMaze` for a clear exit landmark.
 
 ### Coordinate systems
 
@@ -94,7 +109,7 @@ If you reorder or omit files, `generateWorld` will log an error and fall back to
 Defined in [`js/world/generator.js`](js/world/generator.js).
 
 - **Arguments:** `rootEl` — DOM node (typically `#world-root`); `seed` — number (unsigned coercion inside children).
-- **Returns:** `{ spawnWorld: { x, y, z }, gridW, gridH, markerTile }` from `buildAgameTileWorld`. Use `spawnWorld` to place `<a-player>` after generation.
+- **Returns:** `{ spawnWorld, gridW, gridH, markerTile, goalTile? }` from `buildAgameTileWorld` (goal only if you passed `goalTile` and it was valid). Use `spawnWorld` to place `<a-player>` after generation.
 - **Side effects:** Appends many elements under `rootEl`. Clear `rootEl` first if regenerating.
 
 **Regenerating at runtime:** remove children from `#world-root`, call `generateWorld` again with a new seed, move the player, then refresh a-game raycasters (see [`index.html`](index.html) `refreshRaycasters`).
@@ -109,12 +124,15 @@ Use these when you write a custom page (like [`examples/world-bsp-ridge-union/in
 | `WorldGenRidge.sampleRidgeGrid(W,H,seed,opts?)` | [`ridge-field.js`](js/world/ridge-field.js) | `{ open, raw }` boolean + float grids |
 | `WorldGenCombine.carveFromBsp` / `unionFloor` / `roomsInRidge` / `floodPruneToComponent` | [`combine-bsp-ridge.js`](js/world/combine-bsp-ridge.js) | Merge BSP with ridge |
 | `buildAgameTileWorld(rootEl, tiles, opts?)` | [`grid-build.js`](js/world/grid-build.js) | Tiles → DOM + spawn metadata |
+| `generateMaze(seed, opts?)` | [`maze.js`](js/world/maze.js) | Perfect maze → `tiles`, `markers` (`start` + `goal`) |
 
 **`generateBspDungeon` options:** `width`, `height`, `minLeafSize`, `maxDepth` — control room count and granularity.
 
 **`sampleRidgeGrid` options:** `scale` (feature size), `octaves` (detail), `threshold` in `0..1` (higher = narrower passages).
 
-**`buildAgameTileWorld` options:** `cellSize`, `wallHeight`, `floorThickness`, `markerTile`, `seed`, `includeToys`, `crateCount`.
+**`generateMaze` options:** `width`, `height` — forced odd and ≥ 7.
+
+**`buildAgameTileWorld` options:** `cellSize`, `wallHeight`, `floorThickness`, `ceilingThickness`, `trimHeight`, `trimDepth`, `markerTile`, `goalTile`, `seed`, `includeToys`, `crateCount`, `visualDetail` (`'tierA'` | `'basic'`).
 
 ### 4. Customising the root demo
 
