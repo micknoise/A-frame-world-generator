@@ -6,7 +6,7 @@
  *   - radial island falloff
  *   - smooth vertex normals (no flat shading / no blocks)
  *   - per-vertex colour from terrain-band classification with smoothstep blending
- *   - flat transparent ocean plane at configurable water level
+ *   - flat transparent ocean plane at the normalized water threshold (world Y = wl × heightScale)
  *
  * Public API (attached to window):
  *   NoiseTerrain.generate(params)  → { positions, colors, normals, indices, … }
@@ -173,7 +173,8 @@
       for (ix = 0; ix < res; ix++) {
         idx = iy * res + ix;
         var hv = heightmap[idx];
-        var worldY = hv <= wl ? wl * heightScale * 0.3 : hv * heightScale;
+        /* One linear map: coast meets the water surface smoothly (no cliff at hv === wl). */
+        var worldY = hv * heightScale;
         positions[idx * 3]     = ix * step - half;
         positions[idx * 3 + 1] = worldY;
         positions[idx * 3 + 2] = iy * step - half;
@@ -222,6 +223,10 @@
       normals[i * 3] = ox / len; normals[i * 3 + 1] = oy / len; normals[i * 3 + 2] = oz / len;
     }
 
+    var mid = Math.floor(res / 2);
+    var midIdx = mid * res + mid;
+    var centerY = positions[midIdx * 3 + 1];
+
     return {
       positions: positions,
       colors: colors,
@@ -230,7 +235,8 @@
       res: res,
       worldScale: worldScale,
       heightScale: heightScale,
-      waterLevelY: wl * heightScale * 0.3
+      waterLevelY: wl * heightScale,
+      centerY: centerY
     };
   }
 
@@ -271,7 +277,7 @@
       side: THREE.DoubleSide
     });
     var oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
-    oceanMesh.position.y = data.waterLevelY + 0.05;
+    oceanMesh.position.y = data.waterLevelY + 0.03;
     scene.object3D.add(oceanMesh);
 
     return data;
