@@ -13,20 +13,20 @@
  *   - <a-box floor> — horizontal runs of adjacent floor cells merged per row → fewer entities.
  *   - <a-box wall> — horizontal runs of adjacent wall cells merged per row, full wallHeight.
  *   - Optional goal marker (visible emissive box) when goalTile is set (mazes).
- *   - visualDetail 'tierA': ceiling, trims, procedural albedo/roughness + optional mesh displacement
- *     (smoother height texture + displacementScale/displacementBias; physics remain simple boxes).
+ *   - visualDetail 'tierA': ceiling, trims; walls (and trims) procedural PBR + optional displacement.
+ *     Floor and ceiling are untextured solid colors.
  *   - Static purple platform + three small dynamic grabbable cubes near spawn (optional).
  *   - Scattered dynamic crates on random floor cells (seeded).
  *
  * OPTIONS
  * -------
- *   visualDetail: 'basic' | 'tierA' (default 'tierA') — Tier A adds ceiling, trims, MeshStandardMaterial
- *     with world-space UV tiling (uniform meters/repeat, mirrored texture wrap) after meshes exist.
+ *   visualDetail: 'basic' | 'tierA' (default 'tierA') — Tier A adds ceiling + trims; walls use
+ *     procedural maps + optional displacement. Floor and ceiling are flat solid colors (no maps).
  *   goalTile: { x, y } — floor tile for a visible “exit” pillar (no floor/wall tag; cosmetic).
  *   ceilingThickness, trimHeight, trimDepth — only used when visualDetail === 'tierA'.
  *   displacement — default true with tierA; set false to skip displacementMap (saves shader cost).
- *   displacementScaleFloor / displacementScaleWall / displacementScaleCeiling — world-unit amplitudes.
- *   textureTileMeters — world size of one full UV repeat (Tier A); default max(1, 1.2 * cellSize).
+ *   displacementScaleWall — wall displacement amplitude (meters); floor/ceiling have no displacement.
+ *   textureTileMeters — wall/trim UV repeat size in meters (Tier A); default max(2, 2 * cellSize).
  *
  * PUBLIC API
  * ----------
@@ -325,27 +325,20 @@
     var THREE = AFRAME.THREE;
     var seed = matOpts.seed != null ? matOpts.seed >>> 0 : 1;
     var useDisp = matOpts.displacement !== false;
-    /* Stronger defaults + normalMap carry most of the readable relief. */
-    var scF = matOpts.displacementScaleFloor != null ? matOpts.displacementScaleFloor : 0.3;
     var scW = matOpts.displacementScaleWall != null ? matOpts.displacementScaleWall : 0.22;
-    var scC = matOpts.displacementScaleCeiling != null ? matOpts.displacementScaleCeiling : 0.26;
 
     var cellSize = matOpts.cellSize != null ? matOpts.cellSize : 1;
-    /* Default ~1.2m+ per repeat: previous 0.45*cell was visually tiny and busy on large surfaces. */
     var textureTileMeters =
       matOpts.textureTileMeters != null
         ? matOpts.textureTileMeters
-        : Math.max(1, cellSize * 1.2);
+        : Math.max(2, cellSize * 2);
 
     var textureBundle = null;
-    function ensureTextureBundle() {
+    function ensureWallTextureBundle() {
       if (textureBundle) return textureBundle;
       var outSize = 192;
-      var floorSet = makeTierSurfaceTextures(THREE, outSize, seed ^ 0x243f6a88, 'floor');
       var wallSet = makeTierSurfaceTextures(THREE, outSize, (seed + 1) ^ 0x85a308d3, 'wall');
-      var ceilSet = makeTierSurfaceTextures(THREE, outSize, (seed + 2) ^ 0x13198a2e, 'ceiling');
 
-      /* Tiling is in UVs (world meters); repeat 1. Mirrored wrap is set on each texture. */
       function setRepOne(s) {
         [s.albedo, s.roughness, s.displacement, s.normal].forEach(function (t) {
           t.repeat.set(1, 1);
@@ -353,11 +346,9 @@
           t.needsUpdate = true;
         });
       }
-      setRepOne(floorSet);
       setRepOne(wallSet);
-      setRepOne(ceilSet);
 
-      textureBundle = { floor: floorSet, wall: wallSet, ceiling: ceilSet };
+      textureBundle = { wall: wallSet };
       return textureBundle;
     }
 
@@ -371,7 +362,6 @@
     }
 
     function applyTierAMaterialsToEntities() {
-      var b = ensureTextureBundle();
       var nodes = rootEl.querySelectorAll('[data-wg-surf]');
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
@@ -380,22 +370,33 @@
         if (!mesh) continue;
         if (mesh.material && mesh.material.userData && mesh.material.userData.wgTierA) continue;
 
-        ensureMeterTiledBoxUvs(mesh, THREE, textureTileMeters);
-
-        var set =
-          kind === 'floor' ? b.floor : kind === 'ceiling' ? b.ceiling : b.wall;
-
         el.removeAttribute('material');
         el.removeAttribute('color');
+
+        if (kind === 'floor' || kind === 'ceiling') {
+          disposeMaterial(mesh.material);
+          var flat = new THREE.MeshStandardMaterial({
+            color: kind === 'floor' ? 0x6e8268 : 0x9eb0c4,
+            roughness: kind === 'floor' ? 0.91 : 0.92,
+            metalness: 0.04,
+            envMapIntensity: 0.48
+          });
+          flat.userData.wgTierA = 1;
+          mesh.material = flat;
+          el.setAttribute('data-wg-tier-a-mat', '1');
+          continue;
+        }
+
+        var b = ensureWallTextureBundle();
+        var set = b.wall;
+        ensureMeterTiledBoxUvs(mesh, THREE, textureTileMeters);
 
         var dispMap = null;
         var dScale = 0;
         var dBias = 0;
         if (useDisp && kind !== 'trim') {
           dispMap = set.displacement;
-          if (kind === 'floor') dScale = scF;
-          else if (kind === 'ceiling') dScale = scC;
-          else dScale = scW;
+          dScale = scW;
           dBias = -dScale * 0.5;
         }
 
@@ -607,11 +608,9 @@
    *   crateCount?: number,
    *   visualDetail?: 'basic' | 'tierA',
    *   displacement?: boolean,
- *   displacementScaleFloor?: number,
- *   displacementScaleWall?: number,
- *   displacementScaleCeiling?: number,
- *   textureTileMeters?: number
- * }} [options]
+   *   displacementScaleWall?: number,
+   *   textureTileMeters?: number
+   * }} [options]
    * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number, markerTile: {x:number,y:number}, goalTile?: {x:number,y:number} }}
    */
   function buildAgameTileWorld(rootEl, tiles, options) {
@@ -668,7 +667,9 @@
         fb.setAttribute('floor', '');
         if (tierA) {
           fb.setAttribute('data-wg-surf', 'floor');
-          applyTierABoxGeometry(fb, widthW, floorThickness, cellSize, 'floor', cellSize);
+          fb.setAttribute('width', String(widthW));
+          fb.setAttribute('height', String(floorThickness));
+          fb.setAttribute('depth', String(cellSize));
         } else {
           fb.setAttribute('color', '#5c6b5c');
           fb.setAttribute('width', String(widthW));
@@ -682,7 +683,9 @@
         if (tierA) {
           var cb = document.createElement('a-box');
           cb.setAttribute('data-wg-surf', 'ceiling');
-          applyTierABoxGeometry(cb, widthW, ceilingThickness, cellSize, 'ceiling', cellSize);
+          cb.setAttribute('width', String(widthW));
+          cb.setAttribute('height', String(ceilingThickness));
+          cb.setAttribute('depth', String(cellSize));
           cb.setAttribute('position', cx + ' ' + ceilY + ' ' + cz);
           cb.setAttribute('shadow', 'cast: true; receive: false');
           rootEl.appendChild(cb);
@@ -765,9 +768,7 @@
         cellSize: cellSize,
         textureTileMeters: options.textureTileMeters,
         displacement: options.displacement !== false,
-        displacementScaleFloor: options.displacementScaleFloor,
-        displacementScaleWall: options.displacementScaleWall,
-        displacementScaleCeiling: options.displacementScaleCeiling
+        displacementScaleWall: options.displacementScaleWall
       });
     }
 
