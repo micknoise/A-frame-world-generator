@@ -63,7 +63,8 @@
       <label>Ceiling detail <input type="range" id="ceilDet" min="0" max="0.55" step="0.02" value="0.32"><span id="ceilDetVal">0.32</span></label>
       <label>Smooth union (× cell) <input type="range" id="smoothK" min="0.15" max="0.85" step="0.02" value="0.42"><span id="smoothKVal">0.42</span></label>
       <label>Voxel step <input type="range" id="voxelStep" min="0.38" max="0.85" step="0.02" value="0.52"><span id="voxelStepVal">0.52</span></label>
-      <label>Surface bump <input type="range" id="surfDisp" min="0" max="0.24" step="0.01" value="0.16"><span id="surfDispVal">0.16</span></label>
+      <label>Surface bump <input type="range" id="surfDisp" min="0.06" max="0.22" step="0.01" value="0.11"><span id="surfDispVal">0.11</span></label>
+      <div style="font-size:10px;color:#78909c;margin-top:4px;">Bump scales floor / wall / ceiling like noise dungeon (0.12 / 0.35 / 0.25 at ref 0.09).</div>
       <button id="generateBtn">&#9654; Regenerate</button>
       <div class="hint">
         Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
@@ -193,10 +194,10 @@
           regions: bsp.regions,
           smoothUnion: CS * kMul,
           smoothCap: CS * Math.min(0.28, kMul * 0.55),
-          noiseScale: 0.54,
-          octaves: 5,
+          noiseScale: 0.4,
+          octaves: 4,
           surfaceDisplacement: parseFloat(document.getElementById('surfDisp').value),
-          uvScale: 0.82,
+          uvScale: 0.44,
           voxelStep: parseFloat(document.getElementById('voxelStep').value),
           maxAxisSamples: 124,
           ceilingMode: 'dome',
@@ -211,7 +212,7 @@
           materialColor: 0x5c5957,
           materialRoughness: 0.97,
           materialMetalness: 0,
-          cobbleDisplacementMul: 1.18
+          cobbleDisplacementMul: 1
         });
 
         var player = document.getElementById('player');

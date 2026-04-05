@@ -17,8 +17,13 @@
  *   ceilingRoomSpread — scales each room’s Gaussian width (default ~1.36, >1 reaches into corridors).
  *   ceilingDomeAmplitude, ceilingDomeFalloff, ceilingDetailAmplitude, ceilingDetailScale
  *   ceilingDomeScope: 'rooms' | 'map' — force map-wide dome even if regions exist (optional).
- *   albedoMode: 'luminance' | 'white' | 'cobble' — cobble = multi-scale fBm vertex tones (grey stone).
- *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = blotchy multi-freq grain for masonry.
+ *   floorDisplacement / wallDisplacement / ceilingDisplacement — like noise-dungeon.js (defaults 0.12 /
+ *   0.35 / 0.25). If only surfaceDisplacement is set, scales those three from the old single 0.09 ref.
+ *   Mesh displacement uses the same 2D fBm planes and seed offsets (0, 100, 200/300, 400/500) as
+ *   buildDisplacedQuad, blended by squared SDF gradient (triplanar weights), not a single normal push.
+ *
+ *   albedoMode: 'luminance' | 'white' | 'cobble' — cobble = large-patch vertex tones (grey stone).
+ *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = low-frequency masonry grain on the map.
  *   grainNeutral: true — shorthand for grainStyle 'neutral' if grainStyle omitted.
  *   materialColor, materialRoughness, materialMetalness — PBR tweaks.
  *
@@ -116,12 +121,13 @@
         u = px / size;
         v = py / size;
         if (style === 'cobble') {
-          g0 = grainNoise.fbm(u * 6 + 1.7, v * 6 + 0.3, 4);
-          g1 = grainNoise.fbm(u * 18 + 4.2, v * 18 + 2.1, 3);
-          g2 = grainNoise.fbm(u * 42 + 0.8, v * 42 + 3.4, 2);
-          mix = g0 * 0.45 + g1 * 0.35 + g2 * 0.2;
-          grey = Math.floor(72 + mix * 105);
-          grey = Math.max(58, Math.min(188, grey));
+          /* Large mortar joints + medium stone breakup (world UVs are ~0.5–2 units; keep tex low-freq). */
+          g0 = grainNoise.fbm(u * 2.2 + 0.35, v * 2.2 + 0.08, 4);
+          g1 = grainNoise.fbm(u * 7.5 + 1.9, v * 7.5 + 1.2, 3);
+          g2 = grainNoise.fbm(u * 16 + 4.4, v * 16 + 0.6, 2);
+          mix = g0 * 0.5 + g1 * 0.35 + g2 * 0.15;
+          grey = Math.floor(55 + mix * 125);
+          grey = Math.max(42, Math.min(205, grey));
         } else if (style === 'neutral') {
           g0 = grainNoise.fbm(u * 24, v * 24, 3);
           grey = Math.floor(248 + g0 * 7);
@@ -328,7 +334,41 @@
     return positions;
   }
 
-  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode, cobbleDispMul) {
+  /**
+   * Same sampling pattern as noise-dungeon.js buildDisplacedQuad: floor/ceiling in XZ,
+   * ±X walls use (py,pz) with offsets 400/500, ±Z walls use (px,py) with 200/300.
+   * Weights tx,ty,tz are squared normal components (triplanar), so walls/floor read distinct fBm.
+   */
+  function axisNoiseDisplacement(noise, px, py, pz, gx, gy, gz, nScale, nOct, floorAmp, wallAmp, ceilAmp) {
+    var tx = gx * gx;
+    var ty = gy * gy;
+    var tz = gz * gz;
+    var sum = tx + ty + tz;
+    if (sum < 1e-14) {
+      tx = ty = tz = 1 / 3;
+    } else {
+      tx /= sum;
+      ty /= sum;
+      tz /= sum;
+    }
+    var hFloor = (noise.fbm(px * nScale + 0, pz * nScale + 0, nOct) - 0.5) * 2 * floorAmp;
+    var hCeil = (noise.fbm(px * nScale + 100, pz * nScale + 100, nOct) - 0.5) * 2 * ceilAmp;
+    var offX = gx >= 0 ? 400 : 500;
+    var hWallX = (noise.fbm(py * nScale + offX, pz * nScale + offX * 1.3, nOct) - 0.5) * 2 * wallAmp;
+    var offZ = gz >= 0 ? 200 : 300;
+    var hWallZ = (noise.fbm(px * nScale + offZ, py * nScale + offZ * 1.3, nOct) - 0.5) * 2 * wallAmp;
+    var dy = 0;
+    if (gy > 0) dy += ty * hFloor;
+    if (gy < 0) dy -= ty * hCeil;
+    var dx = tx * hWallX * (Math.abs(gx) < 1e-7 ? 0 : gx >= 0 ? 1 : -1);
+    var dz = tz * hWallZ * (Math.abs(gz) < 1e-7 ? 0 : gz >= 0 ? 1 : -1);
+    var lumBlend =
+      noise.fbm(px * nScale + 17, pz * nScale + 23, nOct) * 0.52 +
+      noise.fbm(py * nScale * 1.1 + 41, px * nScale + 11, nOct) * 0.48;
+    return { dx: dx, dy: dy, dz: dz, lumBlend: lumBlend };
+  }
+
+  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul) {
     var triCount = positions.length / 9;
     var vertCount = triCount * 3;
     var pos = new Float32Array(vertCount * 3);
@@ -336,7 +376,8 @@
     var normals = new Float32Array(vertCount * 3);
     var uvs = new Float32Array(vertCount * 2);
     var eps = 0.06;
-    var ti, vi, vidx, i, base, px, py, pz, g, lum, disp, n1, n2, nxv, nyv, nzv, anx, any, anz;
+    var ti, vi, vidx, i, base, px, py, pz, g, lum, nxv, nyv, nzv, anx, any, anz;
+    var ad, cMul;
 
     for (ti = 0; ti < triCount; ti++) {
       base = ti * 9;
@@ -347,15 +388,11 @@
         pz = positions[base + vi * 3 + 2];
 
         g = sdfGradient(sdf, px, py, pz, eps);
-        n1 = noise.fbm(px * nScale + 17, pz * nScale + 23, nOct);
-        n2 = noise.fbm(py * nScale * 1.1 + 41, px * nScale + 11, nOct);
-        lum = (n1 + n2) * 0.5;
-        var dispMul = albedoMode === 'cobble' ? (cobbleDispMul || 1.12) : 1;
-        disp = (lum - 0.5) * 2 * dispAmp * dispMul;
-
-        px += g.x * disp;
-        py += g.y * disp;
-        pz += g.z * disp;
+        ad = axisNoiseDisplacement(noise, px, py, pz, g.x, g.y, g.z, nScale, nOct, floorAmp, wallAmp, ceilAmp);
+        cMul = albedoMode === 'cobble' ? (cobbleDispMul != null ? cobbleDispMul : 1.06) : 1;
+        px += ad.dx * cMul;
+        py += ad.dy * cMul;
+        pz += ad.dz * cMul;
 
         pos[vidx * 3] = px;
         pos[vidx * 3 + 1] = py;
@@ -366,16 +403,19 @@
           colors[vidx * 3 + 1] = 1;
           colors[vidx * 3 + 2] = 1;
         } else if (albedoMode === 'cobble') {
-          var n3 = noise.fbm(px * nScale * 0.42 + 3.1, pz * nScale * 0.42 + 8.4, Math.min(5, nOct + 1));
-          var n4 = noise.fbm(px * nScale * 1.9 + 12, pz * nScale * 1.9 - 4, nOct);
-          var stone = n1 * 0.28 + n2 * 0.28 + n3 * 0.32 + n4 * 0.12;
-          lum = 0.36 + stone * 0.44;
-          if (lum < 0.32) lum = 0.32;
-          if (lum > 0.82) lum = 0.82;
+          /* Large stone patches (low f) + grout lines (mid) — sample after displacement. */
+          var cLo = noise.fbm(px * nScale * 0.16 + 2.2, pz * nScale * 0.16 + 5.1, 5);
+          var cMd = noise.fbm(px * nScale * 0.48 + 19, pz * nScale * 0.48 + 8.7, 4);
+          var cHi = noise.fbm(px * nScale * 0.95 + 7, py * nScale * 0.85 + 14, nOct);
+          var stone = cLo * 0.48 + cMd * 0.38 + cHi * 0.14;
+          lum = 0.3 + stone * 0.52;
+          if (lum < 0.28) lum = 0.28;
+          if (lum > 0.88) lum = 0.88;
           colors[vidx * 3] = lum;
           colors[vidx * 3 + 1] = lum;
           colors[vidx * 3 + 2] = lum;
         } else {
+          lum = ad.lumBlend;
           colors[vidx * 3] = lum;
           colors[vidx * 3 + 1] = lum;
           colors[vidx * 3 + 2] = lum;
@@ -447,8 +487,24 @@
     var kCap = options.smoothCap != null ? options.smoothCap : CS * 0.22;
     var nScale = options.noiseScale != null ? options.noiseScale : 0.38;
     var nOct = options.octaves != null ? options.octaves : 4;
-    var dispAmp = options.surfaceDisplacement != null ? options.surfaceDisplacement : 0.09;
     var uvScale = options.uvScale != null ? options.uvScale : 2;
+    var surfDisp = options.surfaceDisplacement;
+    var floorAmp = options.floorDisplacement;
+    var wallAmp = options.wallDisplacement;
+    var ceilAmp = options.ceilingDisplacement;
+    if (floorAmp == null && wallAmp == null && ceilAmp == null && surfDisp == null) {
+      floorAmp = 0.12;
+      wallAmp = 0.35;
+      ceilAmp = 0.25;
+    } else if (surfDisp != null && floorAmp == null && wallAmp == null && ceilAmp == null) {
+      floorAmp = surfDisp * (0.12 / 0.09);
+      wallAmp = surfDisp * (0.35 / 0.09);
+      ceilAmp = surfDisp * (0.25 / 0.09);
+    } else {
+      if (floorAmp == null) floorAmp = 0.12;
+      if (wallAmp == null) wallAmp = 0.35;
+      if (ceilAmp == null) ceilAmp = 0.25;
+    }
     var ceilingMode = options.ceilingMode != null ? options.ceilingMode : 'flat';
     var domeAmp = options.ceilingDomeAmplitude != null ? options.ceilingDomeAmplitude : 0;
     var domeFall = options.ceilingDomeFalloff != null ? options.ceilingDomeFalloff : 1.25;
@@ -467,7 +523,7 @@
     var matColorOpt = options.materialColor;
     var matRough = options.materialRoughness != null ? options.materialRoughness : 0.88;
     var matMetal = options.materialMetalness != null ? options.materialMetalness : 0.03;
-    var cobbleDispMul = options.cobbleDisplacementMul != null ? options.cobbleDisplacementMul : 1.14;
+    var cobbleDispMul = options.cobbleDisplacementMul != null ? options.cobbleDisplacementMul : 1;
 
     var H = tiles.length;
     var W = tiles[0].length;
@@ -540,7 +596,7 @@
     if (soup.length < 9) {
       geo = new THREE.BoxGeometry(CS * 2, 0.2, CS * 2);
     } else {
-      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, dispAmp, uvScale, THREE, albedoMode, cobbleDispMul);
+      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul);
     }
 
     var grainCanvas = generateGrainTexture(seed, 256, grainStyle);
