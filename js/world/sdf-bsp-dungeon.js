@@ -599,23 +599,24 @@
       geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul);
     }
 
-    var grainCanvas = generateGrainTexture(seed, 256, grainStyle);
-    var grainTex = new THREE.CanvasTexture(grainCanvas);
-    grainTex.wrapS = THREE.RepeatWrapping;
-    grainTex.wrapT = THREE.RepeatWrapping;
-    grainTex.magFilter = THREE.LinearFilter;
-    grainTex.minFilter = THREE.LinearMipmapLinearFilter;
-    grainTex.anisotropy = 4;
-    grainTex.needsUpdate = true;
-
     var matOpts = {
-      map: grainTex,
       vertexColors: true,
       flatShading: false,
       roughness: matRough,
       metalness: matMetal,
       side: THREE.FrontSide
     };
+    if (grainStyle !== 'none') {
+      var grainCanvas = generateGrainTexture(seed, 256, grainStyle);
+      var grainTex = new THREE.CanvasTexture(grainCanvas);
+      grainTex.wrapS = THREE.RepeatWrapping;
+      grainTex.wrapT = THREE.RepeatWrapping;
+      grainTex.magFilter = THREE.LinearFilter;
+      grainTex.minFilter = THREE.LinearMipmapLinearFilter;
+      grainTex.anisotropy = 4;
+      grainTex.needsUpdate = true;
+      matOpts.map = grainTex;
+    }
     if (matColorOpt != null) {
       matOpts.color = matColorOpt instanceof THREE.Color ? matColorOpt : new THREE.Color(matColorOpt);
     }

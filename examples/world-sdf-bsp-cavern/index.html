@@ -126,17 +126,23 @@
       var WH = 3.5;
       var animStarted = false;
 
+      /* Spot light and target are THREE.js objects added directly to the scene graph */
+      var _spotLight = null;
+      var _spotTarget = null;
+      var _spotDir = null;
+      var _spotWorldQ = null;
+
       function ensureHoverLight() {
-        var existing = document.getElementById('cavern-torch');
-        if (existing) return existing;
-        var player = document.getElementById('player');
-        var cam = player.querySelector('[camera], a-camera');
-        var target = cam || player;
-        var torch = document.createElement('a-entity');
-        torch.id = 'cavern-torch';
-        torch.setAttribute('light', 'type: point; color: #c4781a; intensity: 1.4; distance: 28; decay: 2');
-        target.appendChild(torch);
-        return torch;
+        if (_spotLight) return;
+        var THREE = AFRAME.THREE;
+        var sceneObj = document.getElementById('scene').object3D;
+        _spotLight = new THREE.SpotLight(0xc4601a, 0.75, 24, Math.PI * 0.38, 0.55, 2);
+        _spotTarget = new THREE.Object3D();
+        sceneObj.add(_spotLight);
+        sceneObj.add(_spotTarget);
+        _spotLight.target = _spotTarget;
+        _spotDir = new THREE.Vector3();
+        _spotWorldQ = new THREE.Quaternion();
       }
 
       function startLightMotion() {
@@ -144,24 +150,25 @@
         animStarted = true;
         ensureHoverLight();
         function frame(now) {
+          if (!_spotLight) { requestAnimationFrame(frame); return; }
           var t = now * 0.001;
-          var torch = document.getElementById('cavern-torch');
-          if (!torch || !torch.object3D) { requestAnimationFrame(frame); return; }
-          /* Torch flicker: sum of odd-frequency sinusoids */
+          var camEl = document.getElementById('scene').querySelector('a-camera');
+          if (camEl && camEl.object3D) {
+            /* Move spot light to camera world position */
+            camEl.object3D.getWorldPosition(_spotLight.position);
+            /* Aim target along camera's world forward (-Z) */
+            camEl.object3D.getWorldQuaternion(_spotWorldQ);
+            _spotDir.set(0, 0, -1).applyQuaternion(_spotWorldQ);
+            _spotTarget.position.copy(_spotLight.position).addScaledVector(_spotDir, 10);
+            _spotTarget.updateMatrixWorld();
+          }
+          /* Torch flicker */
           var flicker =
             Math.sin(t * 7.3)  * 0.10 +
             Math.sin(t * 13.7) * 0.06 +
             Math.sin(t * 23.1) * 0.04 +
             Math.sin(t * 47.3) * 0.02;
-          /* Slight positional sway */
-          var sx = Math.sin(t * 1.8) * 0.06 + Math.sin(t * 4.7) * 0.03;
-          var sy = Math.sin(t * 2.3) * 0.05;
-          var sz = Math.sin(t * 1.5) * 0.06 + Math.sin(t * 5.1) * 0.02;
-          var lightComp = torch.components && torch.components.light;
-          if (lightComp && lightComp.light) {
-            lightComp.light.intensity = Math.max(0.4, 1.4 * (1 + flicker));
-          }
-          torch.object3D.position.set(sx, sy, sz);
+          _spotLight.intensity = Math.max(0.2, 0.75 * (1 + flicker));
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
@@ -217,7 +224,7 @@
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
           ceilingDetailScale: 0.1,
           albedoMode: 'luminance',
-          grainStyle: 'default',
+          grainStyle: 'none',
           materialRoughness: 0.95,
           materialMetalness: 0
         });
