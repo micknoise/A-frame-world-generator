@@ -38,17 +38,6 @@
       <strong>repository root</strong> over HTTP and open paths below (not <code>file://</code>).
     </p>
 
-    <h2>Tutorial</h2>
-    <ul>
-      <li>
-        <a href="world-noise-terrain/">Noise terrain</a> — same stack as other examples (A-Frame 1.3,
-        a-game, Cannon worker, <code>a-player</code>). Terrain mesh sits under <code>floor</code> so
-        locomotion raycasts onto the surface. Optional
-        <a href="world-noise-terrain/index-fly.html">fly-only HUD</a>. Code:
-        <code>js/world/noise-terrain.js</code>.
-      </li>
-    </ul>
-
     <h2>Indoor / dungeon generators</h2>
     <ul>
       <li>
@@ -66,6 +55,23 @@
       <li>
         <a href="world-bsp-ridge-rooms/">Ridge cavern + BSP rooms</a> — ridge forms the cave; BSP room
         rectangles are forced open as anchor chambers.
+      </li>
+      <li>
+        <a href="world-noise-dungeon/">BSP noise dungeon</a> — BSP generates the room/corridor layout;
+        value noise displaces floor, wall, and ceiling meshes to create organic cave-like surfaces.
+        Floors stay gently lumpy (navigable), walls bulge and recede like natural rock, ceilings sag
+        with stalactite-like variation. All displacement amplitudes adjustable in real time.
+        Uses <code>js/world/noise-dungeon.js</code> + <code>js/world/bsp-dungeon.js</code>.
+      </li>
+    </ul>
+
+    <h2>Outdoor / landscape generators</h2>
+    <ul>
+      <li>
+        <a href="world-noise-terrain/">Noise terrain</a> — layered value noise (fBm) with radial
+        island falloff generates a single high-resolution smooth mesh with per-vertex terrain
+        colouring (water &rarr; sand &rarr; grass &rarr; forest &rarr; hills &rarr; rock &rarr; snow) and a flat ocean plane.
+        All parameters adjustable in real time. Uses <code>js/world/noise-terrain.js</code>.
       </li>
     </ul>
 

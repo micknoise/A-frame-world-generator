@@ -1,20 +1,13 @@
 /**
  * noise-terrain.js — Smooth procedural terrain mesh via layered value noise.
  *
- * Generates a single high-resolution BufferGeometry with:
- *   - fBm (fractal Brownian motion) value noise heightmap
- *   - radial island falloff
- *   - smooth vertex normals (no flat shading / no blocks)
- *   - per-vertex colour from terrain-band classification with smoothstep blending
- *   - flat transparent ocean plane at the normalized water threshold (world Y = wl × heightScale)
+ * The mesh is vertically shifted so that the chosen spawn point sits at Y ≈ 0,
+ * matching a-game's expectation that floors are near the scene origin.
+ * Ocean plane is shifted by the same amount.
  *
- * Public API (attached to window):
- *   NoiseTerrain.generate(params)  → { positions, colors, normals, indices, spawnPlayerY, … }
- *   NoiseTerrain.build(scene, params) → terrain + ocean meshes.
- *   scene may be:
- *     { object3D } — legacy: both meshes under the same group (fly demos).
- *     { terrainRoot, oceanRoot } — terrain under terrainRoot; ocean under oceanRoot.
- *       Put terrain under an <a-entity floor=""> so a-game locomotion raycasts hit the mesh.
+ * Public API:
+ *   NoiseTerrain.generate(params) → data object
+ *   NoiseTerrain.build(rootEl, params) → data object
  */
 (function () {
   'use strict';
@@ -44,7 +37,6 @@
     };
   }
 
-  // Quintic smootherstep for continuous second-derivative noise
   function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
   function lerp(a, b, t) { return a + (b - a) * t; }
 
@@ -81,27 +73,17 @@
   function smoothstep(t) { return t * t * (3 - 2 * t); }
 
   function lerpCol(a, b, t) {
-    return [a[0] + (b[0] - a[0]) * t,
-            a[1] + (b[1] - a[1]) * t,
-            a[2] + (b[2] - a[2]) * t];
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
   }
 
-  // Band definitions: [landFraction, [r,g,b]]
   var LAND_BANDS = [
-    [0.00, [0.878, 0.788, 0.498]],  // sand
-    [0.05, [0.878, 0.788, 0.498]],
-    [0.10, [0.322, 0.745, 0.353]],  // grass
-    [0.30, [0.322, 0.745, 0.353]],
-    [0.35, [0.176, 0.541, 0.243]],  // forest
-    [0.50, [0.176, 0.541, 0.243]],
-    [0.55, [0.420, 0.357, 0.271]],  // hills/dirt
-    [0.70, [0.420, 0.357, 0.271]],
-    [0.75, [0.541, 0.541, 0.541]],  // rock
-    [0.88, [0.541, 0.541, 0.541]],
-    [0.92, [0.941, 0.941, 0.941]],  // snow
-    [1.00, [0.941, 0.941, 0.941]]
+    [0.00, [0.878, 0.788, 0.498]], [0.05, [0.878, 0.788, 0.498]],
+    [0.10, [0.322, 0.745, 0.353]], [0.30, [0.322, 0.745, 0.353]],
+    [0.35, [0.176, 0.541, 0.243]], [0.50, [0.176, 0.541, 0.243]],
+    [0.55, [0.420, 0.357, 0.271]], [0.70, [0.420, 0.357, 0.271]],
+    [0.75, [0.541, 0.541, 0.541]], [0.88, [0.541, 0.541, 0.541]],
+    [0.92, [0.941, 0.941, 0.941]], [1.00, [0.941, 0.941, 0.941]]
   ];
-
   var DEEP_WATER    = [0.102, 0.322, 0.463];
   var SHALLOW_WATER = [0.161, 0.502, 0.725];
 
@@ -121,49 +103,8 @@
     return LAND_BANDS[LAND_BANDS.length - 1][1];
   }
 
-  /** Bilinear sample on row-major heightmap (flat array, size res × res; row iy = world Z). */
-  function sampleHeightmapBilinear(hmap, res, fx, fz) {
-    var x0 = Math.floor(fx);
-    var z0 = Math.floor(fz);
-    var tx = fx - x0;
-    var tz = fz - z0;
-    var x1 = Math.min(res - 1, x0 + 1);
-    var z1 = Math.min(res - 1, z0 + 1);
-    var v00 = hmap[z0 * res + x0];
-    var v10 = hmap[z0 * res + x1];
-    var v01 = hmap[z1 * res + x0];
-    var v11 = hmap[z1 * res + x1];
-    return (
-      v00 * (1 - tx) * (1 - tz) +
-      v10 * tx * (1 - tz) +
-      v01 * (1 - tx) * tz +
-      v11 * tx * tz
-    );
-  }
+  // ── Generate ────────────────────────────────────────────────────────────────
 
-  function worldXZToSurfaceY(hmap, res, step, half, heightScale, worldX, worldZ) {
-    var fx = (worldX + half) / step;
-    var fz = (worldZ + half) / step;
-    if (fx < 0) fx = 0;
-    if (fz < 0) fz = 0;
-    if (fx > res - 1) fx = res - 1;
-    if (fz > res - 1) fz = res - 1;
-    return sampleHeightmapBilinear(hmap, res, fx, fz) * heightScale;
-  }
-
-  // ── Generate data ───────────────────────────────────────────────────────────
-
-  /**
-   * @param {Object} params
-   * @param {number} params.seed          - integer seed
-   * @param {number} params.gridSize      - vertices per side (e.g. 256)
-   * @param {number} params.worldScale    - world units across (e.g. 200)
-   * @param {number} params.heightScale   - max elevation in world units (e.g. 35)
-   * @param {number} params.noiseScale    - noise zoom (e.g. 3)
-   * @param {number} params.octaves       - fBm octaves (e.g. 6)
-   * @param {number} params.waterLevel    - 0-100 percentage (e.g. 30)
-   * @param {number} params.falloff       - 0-100 island radial falloff (e.g. 50)
-   */
   function generate(params) {
     var seed        = params.seed || 42;
     var gridSize    = params.gridSize || 256;
@@ -179,9 +120,9 @@
     var half  = worldScale / 2;
     var step  = worldScale / (res - 1);
 
-    // Heightmap pass
+    // 1. Heightmap pass — values in [0, 1]
     var heightmap = new Float32Array(res * res);
-    var ix, iy, idx;
+    var ix, iy;
     for (iy = 0; iy < res; iy++) {
       for (ix = 0; ix < res; ix++) {
         var nx = ix / res * noiseScale;
@@ -197,20 +138,61 @@
       }
     }
 
-    // Vertex buffers
+    // 2. Find spawn point BEFORE building vertices (need its height to shift mesh)
+    var bestSpawn = null;
+    var bestHeight = -Infinity;
+    var searchR = Math.floor(res * 0.15);
+    var midIx = Math.floor(res / 2);
+    var midIy = Math.floor(res / 2);
+
+    for (iy = midIy - searchR; iy <= midIy + searchR; iy++) {
+      for (ix = midIx - searchR; ix <= midIx + searchR; ix++) {
+        if (ix < 0 || ix >= res || iy < 0 || iy >= res) continue;
+        var hVal = heightmap[iy * res + ix];
+        var landFrac = wl < 1 ? (hVal - wl) / (1 - wl) : 0;
+        if (hVal > wl && landFrac >= 0.05 && landFrac <= 0.35) {
+          if (hVal > bestHeight) {
+            bestHeight = hVal;
+            bestSpawn = { ix: ix, iy: iy };
+          }
+        }
+      }
+    }
+    if (!bestSpawn) {
+      for (iy = midIy - searchR; iy <= midIy + searchR; iy++) {
+        for (ix = midIx - searchR; ix <= midIx + searchR; ix++) {
+          if (ix < 0 || ix >= res || iy < 0 || iy >= res) continue;
+          var hVal2 = heightmap[iy * res + ix];
+          if (hVal2 > wl && hVal2 > bestHeight) {
+            bestHeight = hVal2;
+            bestSpawn = { ix: ix, iy: iy };
+          }
+        }
+      }
+    }
+    if (!bestSpawn) {
+      bestSpawn = { ix: midIx, iy: midIy };
+      bestHeight = heightmap[midIy * res + midIx];
+    }
+
+    // The Y offset: shift the entire mesh down so the spawn surface is at Y=0.
+    // This way the player spawns at Y=0, feet on the ground, matching a-game's
+    // convention where floors are near Y=0.
+    var yOffset = bestHeight * heightScale;
+
+    // 3. Vertex buffers — apply yOffset so spawn surface ≈ Y=0
     var vertCount = res * res;
     var positions = new Float32Array(vertCount * 3);
     var colors    = new Float32Array(vertCount * 3);
     var normals   = new Float32Array(vertCount * 3);
+    var idx;
 
     for (iy = 0; iy < res; iy++) {
       for (ix = 0; ix < res; ix++) {
         idx = iy * res + ix;
         var hv = heightmap[idx];
-        /* One linear map: coast meets the water surface smoothly (no cliff at hv === wl). */
-        var worldY = hv * heightScale;
         positions[idx * 3]     = ix * step - half;
-        positions[idx * 3 + 1] = worldY;
+        positions[idx * 3 + 1] = hv * heightScale - yOffset;  // spawn surface → Y=0
         positions[idx * 3 + 2] = iy * step - half;
         var col = terrainColor(hv, wl);
         colors[idx * 3]     = col[0];
@@ -219,53 +201,36 @@
       }
     }
 
-    // Index buffer
+    // 4. Index buffer
     var cellCount = (res - 1) * (res - 1);
     var indices = new Uint32Array(cellCount * 6);
     var ti = 0;
     for (iy = 0; iy < res - 1; iy++) {
       for (ix = 0; ix < res - 1; ix++) {
-        var a = iy * res + ix;
-        var b = a + 1;
-        var c = a + res;
-        var d = c + 1;
+        var a = iy * res + ix, b = a + 1, c = a + res, d = c + 1;
         indices[ti++] = a; indices[ti++] = c; indices[ti++] = b;
         indices[ti++] = b; indices[ti++] = c; indices[ti++] = d;
       }
     }
 
-    // Smooth vertex normals (accumulate face normals then normalise)
+    // 5. Smooth vertex normals
     var i, i0, i1, i2;
     for (i = 0; i < indices.length; i += 3) {
       i0 = indices[i]; i1 = indices[i + 1]; i2 = indices[i + 2];
-      var ax = positions[i1 * 3] - positions[i0 * 3];
-      var ay = positions[i1 * 3 + 1] - positions[i0 * 3 + 1];
-      var az = positions[i1 * 3 + 2] - positions[i0 * 3 + 2];
-      var bx = positions[i2 * 3] - positions[i0 * 3];
-      var by = positions[i2 * 3 + 1] - positions[i0 * 3 + 1];
-      var bz = positions[i2 * 3 + 2] - positions[i0 * 3 + 2];
-      var nnx = ay * bz - az * by;
-      var nny = az * bx - ax * bz;
-      var nnz = ax * by - ay * bx;
-      normals[i0 * 3] += nnx; normals[i0 * 3 + 1] += nny; normals[i0 * 3 + 2] += nnz;
-      normals[i1 * 3] += nnx; normals[i1 * 3 + 1] += nny; normals[i1 * 3 + 2] += nnz;
-      normals[i2 * 3] += nnx; normals[i2 * 3 + 1] += nny; normals[i2 * 3 + 2] += nnz;
+      var ax = positions[i1*3]-positions[i0*3], ay = positions[i1*3+1]-positions[i0*3+1], az = positions[i1*3+2]-positions[i0*3+2];
+      var bx = positions[i2*3]-positions[i0*3], by = positions[i2*3+1]-positions[i0*3+1], bz = positions[i2*3+2]-positions[i0*3+2];
+      var nnx = ay*bz - az*by, nny = az*bx - ax*bz, nnz = ax*by - ay*bx;
+      normals[i0*3]+=nnx; normals[i0*3+1]+=nny; normals[i0*3+2]+=nnz;
+      normals[i1*3]+=nnx; normals[i1*3+1]+=nny; normals[i1*3+2]+=nnz;
+      normals[i2*3]+=nnx; normals[i2*3+1]+=nny; normals[i2*3+2]+=nnz;
     }
     for (i = 0; i < vertCount; i++) {
-      var ox = normals[i * 3], oy = normals[i * 3 + 1], oz = normals[i * 3 + 2];
-      var len = Math.sqrt(ox * ox + oy * oy + oz * oz) || 1;
-      normals[i * 3] = ox / len; normals[i * 3 + 1] = oy / len; normals[i * 3 + 2] = oz / len;
+      var ox = normals[i*3], oy = normals[i*3+1], oz = normals[i*3+2];
+      var len = Math.sqrt(ox*ox + oy*oy + oz*oz) || 1;
+      normals[i*3] = ox/len; normals[i*3+1] = oy/len; normals[i*3+2] = oz/len;
     }
 
-    var mid = Math.floor(res / 2);
-    var midIdx = mid * res + mid;
-    var centerY = positions[midIdx * 3 + 1];
-    var heightAtOrigin = worldXZToSurfaceY(heightmap, res, step, half, heightScale, 0, 0);
-    var wlY = wl * heightScale;
-    var surfaceY = Math.max(heightAtOrigin, centerY);
-    if (surfaceY < wlY + 0.05) surfaceY = wlY + 0.08;
-    /* Generous clearance: a-game rig / floor raycast origin is not always mesh-local surfaceY. */
-    var spawnPlayerY = surfaceY + 14;
+    var wlY = wl * heightScale - yOffset;  // ocean also shifted
 
     return {
       positions: positions,
@@ -276,55 +241,32 @@
       worldScale: worldScale,
       heightScale: heightScale,
       waterLevelY: wlY,
-      centerY: centerY,
-      heightAtOrigin: heightAtOrigin,
-      spawnPlayerY: spawnPlayerY
+      spawnWorld: {
+        x: bestSpawn.ix * step - half,
+        y: 0,   // spawn surface IS Y=0 now
+        z: bestSpawn.iy * step - half
+      }
     };
   }
 
-  // ── Build into an A-Frame scene ─────────────────────────────────────────────
+  // ── Build into A-Frame ──────────────────────────────────────────────────────
 
-  function disposeSubtree(obj) {
-    obj.traverse(function (o) {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (o.material.map) o.material.map.dispose();
-        o.material.dispose();
-      }
-    });
-  }
-
-  function removeTaggedChildren(root, tagTerrain, tagOcean) {
-    var c;
-    var ch;
-    var u;
-    for (c = root.children.length - 1; c >= 0; c--) {
-      ch = root.children[c];
-      u = ch.userData || {};
-      if ((tagTerrain && u.wgNoiseTerrain) || (tagOcean && u.wgNoiseOcean)) {
-        disposeSubtree(ch);
-        root.remove(ch);
-      }
-    }
-  }
-
-  function build(scene, params) {
+  function build(rootEl, params) {
     var THREE = AFRAME.THREE;
     var data = generate(params);
 
-    var terrainRoot;
-    var oceanRoot;
-    if (scene.terrainRoot) {
-      terrainRoot = scene.terrainRoot;
-      oceanRoot = scene.oceanRoot != null ? scene.oceanRoot : terrainRoot;
-    } else {
-      terrainRoot = scene.object3D;
-      oceanRoot = terrainRoot;
-    }
+    // Clean up previous
+    rootEl.object3D.traverse(function (obj) {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (obj.material.map) obj.material.map.dispose();
+        if (obj.material.dispose) obj.material.dispose();
+      }
+    });
+    while (rootEl.lastChild) rootEl.removeChild(rootEl.lastChild);
+    while (rootEl.object3D.children.length) rootEl.object3D.remove(rootEl.object3D.children[0]);
 
-    removeTaggedChildren(terrainRoot, true, false);
-    removeTaggedChildren(oceanRoot, false, true);
-
+    // Terrain mesh under <a-entity floor="">
     var geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
     geo.setAttribute('color',    new THREE.BufferAttribute(data.colors, 3));
@@ -332,42 +274,31 @@
     geo.setIndex(new THREE.BufferAttribute(data.indices, 1));
 
     var mat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.85,
-      metalness: 0.05,
-      flatShading: false,
-      /* FrontSide: downward floor raycasts must hit top faces only (DoubleSide snaps to underside). */
-      side: THREE.FrontSide
+      vertexColors: true, roughness: 0.85, metalness: 0.05,
+      flatShading: false, side: THREE.FrontSide
     });
 
     var terrainMesh = new THREE.Mesh(geo, mat);
-    terrainMesh.userData.wgNoiseTerrain = 1;
-    terrainRoot.add(terrainMesh);
+    var floorEl = document.createElement('a-entity');
+    floorEl.setAttribute('floor', '');
+    rootEl.appendChild(floorEl);
+    floorEl.setObject3D('mesh', terrainMesh);
 
+    // Ocean plane
     var oceanSize = data.worldScale * 1.2;
     var oceanGeo = new THREE.PlaneGeometry(oceanSize, oceanSize, 1, 1);
     oceanGeo.rotateX(-Math.PI / 2);
     var oceanMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(0.1, 0.4, 0.7),
-      roughness: 0.3,
-      metalness: 0.1,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
+      roughness: 0.3, metalness: 0.1,
+      transparent: true, opacity: 0.8, side: THREE.DoubleSide
     });
     var oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
-    oceanMesh.userData.wgNoiseOcean = 1;
     oceanMesh.position.y = data.waterLevelY + 0.03;
-    oceanRoot.add(oceanMesh);
+    rootEl.object3D.add(oceanMesh);
 
     return data;
   }
 
-  // ── Export ───────────────────────────────────────────────────────────────────
-
-  window.NoiseTerrain = {
-    generate: generate,
-    build: build
-  };
-
+  window.NoiseTerrain = { generate: generate, build: build };
 }());

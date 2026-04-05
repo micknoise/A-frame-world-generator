@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Noise terrain (A-Frame 1.3 + a-game)</title>
     <link rel="icon" href="data:," />
-    <!-- For GitHub Pages project sites: <base href="/A-frame-world-generator/" /> -->
     <script>
       window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
     </script>
@@ -29,14 +28,8 @@
         border: 1px solid rgba(200,230,201,0.15);
         max-width: 330px; font-size: 13px; line-height: 1.55;
       }
-      #hud h2 {
-        font-size: 14px; margin-bottom: 10px; color: #a5d6a7;
-        letter-spacing: 0.5px; font-weight: 600;
-      }
-      #hud label {
-        display: flex; justify-content: space-between; align-items: center;
-        margin: 3px 0;
-      }
+      #hud h2 { font-size: 14px; margin-bottom: 10px; color: #a5d6a7; letter-spacing: 0.5px; font-weight: 600; }
+      #hud label { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; }
       #hud label span { min-width: 30px; text-align: right; }
       #hud input[type=range] { width: 130px; accent-color: #66bb6a; }
       #hud input[type=number] {
@@ -52,8 +45,6 @@
       }
       #hud button:hover { background: #388e3c; }
       .hint { font-size: 11px; color: #81c784; margin-top: 8px; opacity: 0.65; }
-      .fly-link { font-size: 11px; color: #aed581; margin-bottom: 8px; }
-      .fly-link a { color: #c5e1a5; }
 
       #legend {
         position: fixed; bottom: 16px; left: 16px; z-index: 10;
@@ -71,7 +62,6 @@
   <body>
 
     <div id="hud">
-      <p class="fly-link">Free-fly (no physics): <a href="index-fly.html">index-fly.html</a></p>
       <h2>Noise Terrain</h2>
       <label>Seed <input type="number" id="seed" value="42"></label>
       <label>Grid Size <input type="range" id="gridSize" min="64" max="512" step="16" value="256"><span id="gridSizeVal">256</span></label>
@@ -82,7 +72,7 @@
       <label>Water Level <input type="range" id="waterLevel" min="0" max="60" step="1" value="30"><span id="waterLevelVal">30%</span></label>
       <label>Island Falloff <input type="range" id="falloff" min="0" max="100" step="1" value="50"><span id="falloffVal">50%</span></label>
       <button id="generateBtn">&#9654; Generate Terrain</button>
-      <div class="hint">Terrain mesh is under <code>floor</code> so a-game locomotion raycasts onto the surface (Cannon has no mesh collider).</div>
+      <div class="hint">WASD to move · Click to capture · Esc to release · ?seed=N in URL</div>
     </div>
 
     <div id="legend">
@@ -110,13 +100,15 @@
       <a-light type="ambient" color="#BBD2E0" intensity="0.5"></a-light>
       <a-light type="directional" color="#FFF5E0" intensity="1.05" position="1 2 0.6"></a-light>
 
-      <!-- Lower terrain + ocean vs scene origin so spawn Y stays comfortably above the mesh. -->
-      <a-entity id="world-root" position="0 -8 0">
-        <!-- floor: a-game locomotion raycaster targets [floor]; mesh lives under this entity. -->
-        <a-entity id="terrain-holder" floor=""></a-entity>
-      </a-entity>
+      <a-entity id="world-root"></a-entity>
 
-      <a-player id="player" locomotion grabbing position="0 20 0"></a-player>
+      <!--
+        a-game locomotion: legs raycast has far=0.625 from 0.5 above feetPos.
+        So the player must start with feet within ~0.125 above the floor surface.
+        We use a <start> marker positioned ON the terrain surface; a-game's start
+        component teleports the player there on init.
+      -->
+      <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
     </a-scene>
 
     <script>
@@ -169,35 +161,36 @@
       var qs = new URLSearchParams(location.search).get('seed');
       if (qs != null) document.getElementById('seed').value = parseInt(qs, 10) || 42;
 
-      var scene = document.getElementById('scene');
+      var sceneEl = document.getElementById('scene');
 
       function rebuildTerrain() {
-        var worldRoot = document.getElementById('world-root');
-        var holder = document.getElementById('terrain-holder');
-        var params = readParams();
+        var root = document.getElementById('world-root');
+        var data = NoiseTerrain.build(root, readParams());
 
-        var data = NoiseTerrain.build(
-          {
-            terrainRoot: holder.object3D,
-            oceanRoot: worldRoot.object3D
-          },
-          params
-        );
+        /*
+          a-game locomotion: the legs entity raycasts downward from (feetPos.y + 0.5)
+          with far=0.625. This means feetPos must be within 0.125 units above the
+          actual mesh surface for the raycast to hit. The <a-player> position sets
+          the rig origin = feetPos (eye height is added by the camera at +1.6).
 
-        document.getElementById('player').setAttribute('position', {
-          x: 0,
-          y: data.spawnPlayerY,
-          z: 0
+          So we place the player with feet exactly ON the spawn surface Y.
+          The first tick's raycast fires from surfaceY+0.5 downward 0.625 → hits
+          at surfaceY → locks the player there.
+        */
+        var player = document.getElementById('player');
+        player.setAttribute('position', {
+          x: data.spawnWorld.x,
+          y: data.spawnWorld.y,
+          z: data.spawnWorld.z
         });
 
         requestAnimationFrame(function () {
-          refreshRaycasters(scene);
-          setTimeout(function () {
-            refreshRaycasters(scene);
-          }, 120);
+          refreshRaycasters(sceneEl);
+          setTimeout(function () { refreshRaycasters(sceneEl); }, 120);
+          setTimeout(function () { refreshRaycasters(sceneEl); }, 500);
           requestAnimationFrame(function () {
             requestAnimationFrame(function () {
-              relaxPointerLockOnCamera(scene);
+              relaxPointerLockOnCamera(sceneEl);
             });
           });
         });
@@ -205,17 +198,13 @@
 
       document.getElementById('generateBtn').addEventListener('click', rebuildTerrain);
 
-      scene.addEventListener(
-        'loaded',
-        function () {
+      sceneEl.addEventListener('loaded', function () {
+        requestAnimationFrame(function () {
           requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              rebuildTerrain();
-            });
+            rebuildTerrain();
           });
-        },
-        { once: true }
-      );
+        });
+      }, { once: true });
     </script>
   </body>
 </html>
