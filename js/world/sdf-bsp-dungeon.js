@@ -10,8 +10,13 @@
  *   SdfBspDungeon.build(rootEl, tiles, options) → { spawnWorld }
  *
  * Optional (defaults match original flat ceiling + greyscale vertex tint):
- *   ceilingMode: 'flat' | 'dome' — dome raises ceiling toward map centre (cavern roof).
+ *   ceilingMode: 'flat' | 'dome' — dome raises the ceiling heightfield.
+ *   options.regions — BSP room rects { x, y, width, height } in tile space; when dome mode
+ *   and regions.length > 0, each room gets its own Gaussian arch (max over rooms); corridors
+ *   pick up the blend where arches overlap. Without regions, one map-wide dome is used.
+ *   ceilingRoomSpread — scales each room’s Gaussian width (default ~1.36, >1 reaches into corridors).
  *   ceilingDomeAmplitude, ceilingDomeFalloff, ceilingDetailAmplitude, ceilingDetailScale
+ *   ceilingDomeScope: 'rooms' | 'map' — force map-wide dome even if regions exist (optional).
  *   albedoMode: 'luminance' | 'white' | 'cobble' — cobble = multi-scale fBm vertex tones (grey stone).
  *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = blotchy multi-freq grain for masonry.
  *   grainNeutral: true — shorthand for grainStyle 'neutral' if grainStyle omitted.
@@ -136,6 +141,24 @@
 
   // ── Wall list + SDF closure ─────────────────────────────────────────────────
 
+  /** One Gaussian vault per BSP room; spread widens the bump into adjacent corridors. */
+  function buildRoomCeilingArches(regions, CS, domeAmp, spread, fallMult) {
+    var arches = [];
+    if (!regions || !regions.length || !(domeAmp > 0)) return arches;
+    spread = spread != null ? spread : 1.36;
+    fallMult = fallMult != null ? fallMult : 1;
+    var i, reg, cx, cz, sx, sz;
+    for (i = 0; i < regions.length; i++) {
+      reg = regions[i];
+      cx = (reg.x + reg.width * 0.5) * CS;
+      cz = (reg.y + reg.height * 0.5) * CS;
+      sx = Math.max(reg.width * CS * 0.5 * spread, CS * 1.15);
+      sz = Math.max(reg.height * CS * 0.5 * spread, CS * 1.15);
+      arches.push({ cx: cx, cz: cz, sx: sx, sz: sz, amp: domeAmp, fall: fallMult });
+    }
+    return arches;
+  }
+
   function buildWallColumns(tiles, W, H, CS, WH) {
     var list = [];
     var ty, tx, cx, cz;
@@ -159,18 +182,34 @@
     var invRz = ceilingCfg.invRz;
     var domeAmp = ceilingCfg.domeAmp != null ? ceilingCfg.domeAmp : 0;
     var domeFall = ceilingCfg.domeFall != null ? ceilingCfg.domeFall : 1.25;
+    var roomArches = ceilingCfg.roomArches;
     var ceilNoise = ceilingCfg.ceilNoise;
     var ceilDetAmp = ceilingCfg.ceilDetAmp != null ? ceilingCfg.ceilDetAmp : 0;
     var ceilDetScale = ceilingCfg.ceilDetScale != null ? ceilingCfg.ceilDetScale : 0.1;
 
     function ceilingY(px, pz) {
       var y = WH;
+      var lift = 0;
       if (mode === 'dome') {
-        var nx = (px - worldCX) * invRx;
-        var nz = (pz - worldCZ) * invRz;
-        var r2 = nx * nx + nz * nz;
-        y += domeAmp * Math.exp(-r2 * domeFall);
+        if (roomArches && roomArches.length) {
+          var ri, a, dx, dz, q, g, h;
+          for (ri = 0; ri < roomArches.length; ri++) {
+            a = roomArches[ri];
+            dx = px - a.cx;
+            dz = pz - a.cz;
+            q = (dx * dx) / (a.sx * a.sx) + (dz * dz) / (a.sz * a.sz);
+            g = Math.exp(-q * a.fall);
+            h = a.amp * g;
+            if (h > lift) lift = h;
+          }
+        } else {
+          var nx = (px - worldCX) * invRx;
+          var nz = (pz - worldCZ) * invRz;
+          var r2 = nx * nx + nz * nz;
+          lift = domeAmp * Math.exp(-r2 * domeFall);
+        }
       }
+      y += lift;
       if (ceilNoise && ceilDetAmp > 0) {
         y += (ceilNoise.fbm(px * ceilDetScale, pz * ceilDetScale, 3) - 0.5) * 2 * ceilDetAmp;
       }
@@ -415,6 +454,12 @@
     var domeFall = options.ceilingDomeFalloff != null ? options.ceilingDomeFalloff : 1.25;
     var ceilDetAmp = options.ceilingDetailAmplitude != null ? options.ceilingDetailAmplitude : 0;
     var ceilDetScale = options.ceilingDetailScale != null ? options.ceilingDetailScale : 0.1;
+    var regions = options.regions;
+    var domeScope = options.ceilingDomeScope;
+    if (domeScope == null) {
+      domeScope = regions && regions.length ? 'rooms' : 'map';
+    }
+    var roomSpread = options.ceilingRoomSpread != null ? options.ceilingRoomSpread : 1.36;
     var albedoMode = options.albedoMode != null ? options.albedoMode : 'luminance';
     var grainStyleOpt = options.grainStyle;
     if (!grainStyleOpt && options.grainNeutral) grainStyleOpt = 'neutral';
@@ -430,14 +475,19 @@
     var worldW = W * CS;
     var worldD = H * CS;
     var ceilNoisePre = new ValueNoise((seed ^ 0xCAFE) >>> 0);
+    var roomArches =
+      ceilingMode === 'dome' && domeScope === 'rooms'
+        ? buildRoomCeilingArches(regions, CS, domeAmp, roomSpread, domeFall)
+        : [];
     var ceilingCfg = {
       mode: ceilingMode,
       worldCX: worldW * 0.5,
       worldCZ: worldD * 0.5,
-      invRx: 1 / Math.max(worldW * (ceilingMode === 'dome' ? 0.38 : 0.45), 0.001),
-      invRz: 1 / Math.max(worldD * (ceilingMode === 'dome' ? 0.38 : 0.45), 0.001),
+      invRx: 1 / Math.max(worldW * (ceilingMode === 'dome' && !roomArches.length ? 0.38 : 0.45), 0.001),
+      invRz: 1 / Math.max(worldD * (ceilingMode === 'dome' && !roomArches.length ? 0.38 : 0.45), 0.001),
       domeAmp: domeAmp,
       domeFall: domeFall,
+      roomArches: roomArches,
       ceilNoise: ceilDetAmp > 0 ? ceilNoisePre : null,
       ceilDetAmp: ceilDetAmp,
       ceilDetScale: ceilDetScale

@@ -66,9 +66,8 @@
       <label>Surface bump <input type="range" id="surfDisp" min="0" max="0.24" step="0.01" value="0.16"><span id="surfDispVal">0.16</span></label>
       <button id="generateBtn">&#9654; Regenerate</button>
       <div class="hint">
-        Ceiling is a heightfield (Gaussian dome + noise), meshed with a hard cap so it actually lifts
-        above the old flat wall-top. Stone uses cobble-style vertex tones and a blotchy grain map —
-        dim scene, single moving lamp above you.
+        Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
+        corridors). Hard ceiling cut vs wall tops. Cobble shading and grain; dim scene, lamp above you.
       </div>
     </div>
 
@@ -191,6 +190,7 @@
           seed: seed,
           cellSize: CS,
           wallHeight: WH,
+          regions: bsp.regions,
           smoothUnion: CS * kMul,
           smoothCap: CS * Math.min(0.28, kMul * 0.55),
           noiseScale: 0.54,
@@ -200,6 +200,8 @@
           voxelStep: parseFloat(document.getElementById('voxelStep').value),
           maxAxisSamples: 124,
           ceilingMode: 'dome',
+          ceilingDomeScope: 'rooms',
+          ceilingRoomSpread: 1.4,
           ceilingDomeAmplitude: parseFloat(document.getElementById('domeAmp').value),
           ceilingDomeFalloff: parseFloat(document.getElementById('domeFall').value),
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
