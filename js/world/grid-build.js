@@ -1,5 +1,41 @@
 /**
- * Turn a 2D tile grid (floor | wall) into a-game primitives: merged row segments for fewer entities.
+ * @fileoverview Raster tile map → A-Frame DOM for a-game locomotion / physics.
+ *
+ * INPUT CONTRACT
+ * --------------
+ *   tiles: string[][] row-major, tiles[y][x] ∈ 'floor' | 'wall'
+ *   Same convention as BSP output: y grows downward in grid space, mapped to +Z in world space.
+ *
+ * OUTPUT / TAGS
+ * -------------
+ * Appends to rootEl (typically #world-root under <a-scene>):
+ *   - <a-box start> — invisible marker at spawn (a-game spawn / navigation helpers).
+ *   - <a-box floor> — horizontal runs of adjacent floor cells merged per row → fewer entities.
+ *   - <a-box wall> — horizontal runs of adjacent wall cells merged per row, full wallHeight.
+ *   - Static purple platform + three small dynamic grabbable cubes near spawn (optional).
+ *   - Scattered dynamic crates on random floor cells (seeded).
+ *
+ * WORLD SPACE
+ * -----------
+ *   cellSize (default 1) — one tile = cellSize meters in X and Z.
+ *   Tile (tx, tz) cell center: ((tx+0.5)*cellSize, 0, (tz+0.5)*cellSize) with tz = row index y.
+ *   Floor boxes sit with their top near y=0; walls rise from y=0 to wallHeight.
+ *
+ * PUBLIC API
+ * ----------
+ *   buildAgameTileWorld(rootEl, tiles, options?)
+ *     options:
+ *       cellSize, wallHeight, floorThickness — geometry scale
+ *       markerTile: { x, y } — tile coords for spawn; if not floor, falls back to first floor tile
+ *       seed — crate / color RNG (mulberry32)
+ *       includeToys — default true (platform + grabbables)
+ *       crateCount — default 10
+ *     returns { spawnWorld: {x,y,z}, gridW, gridH, markerTile }
+ *
+ * PERFORMANCE
+ * -----------
+ * Merging runs along each row reduces entity count vs one box per tile; very large grids still cost
+ * physics — tune GRID_W/H in generator.js or lower crateCount for VR.
  */
 (function () {
   'use strict';
@@ -28,6 +64,7 @@
     return '#' + n.toString(16).padStart(6, '0');
   }
 
+  /** Static plinth + grab toys slightly in front of spawn (-Z) for immediate physics play. */
   function appendSpawnPhysicsToys(rootEl, worldX, worldZ) {
     var platform = document.createElement('a-box');
     platform.setAttribute('position', worldX + ' 0.25 ' + (worldZ - 2));
@@ -72,7 +109,7 @@
    *   includeToys?: boolean,
    *   crateCount?: number
    * }} [options]
-   * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number }}
+   * @returns {{ spawnWorld: {x:number,y:number,z:number}, gridW: number, gridH: number, markerTile: {x:number,y:number} }}
    */
   function buildAgameTileWorld(rootEl, tiles, options) {
     options = options || {};
@@ -105,6 +142,7 @@
 
     var floorY = -floorThickness / 2;
 
+    /* One merged box per maximal horizontal run of floor cells in each row. */
     for (var y = 0; y < H; y++) {
       var x = 0;
       while (x < W) {
@@ -129,6 +167,7 @@
       }
     }
 
+    /* Same run-length idea for walls — tall boxes centered at wallHeight/2. */
     for (var wy = 0; wy < H; wy++) {
       var wx = 0;
       while (wx < W) {
@@ -163,8 +202,8 @@
       if (tiles[ty][tx] !== 'floor') continue;
       if (Math.abs(tx - mt.x) < margin && Math.abs(ty - mt.y) < margin) continue;
 
-      var wx = (tx + 0.5) * cellSize;
-      var wz = (ty + 0.5) * cellSize;
+      var wxp = (tx + 0.5) * cellSize;
+      var wzp = (ty + 0.5) * cellSize;
       var crate = document.createElement('a-box');
       var s = 0.22 + rng() * 0.18;
       crate.setAttribute('body', 'type: dynamic; mass: 0.85');
@@ -175,7 +214,7 @@
       crate.setAttribute('depth', String(s));
       var floorTop = floorThickness;
       var drop = rng() < 0.4 ? 1 + rng() * 2 : 0;
-      crate.setAttribute('position', wx + ' ' + (floorTop + s / 2 + drop).toFixed(2) + ' ' + wz);
+      crate.setAttribute('position', wxp + ' ' + (floorTop + s / 2 + drop).toFixed(2) + ' ' + wzp);
       crate.setAttribute('rotation', '0 ' + Math.floor(rng() * 4) * 90 + ' 0');
       rootEl.appendChild(crate);
     }

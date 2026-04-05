@@ -1,19 +1,149 @@
 # A-frame-world-generator
 
-**Everything runs from this repository.** A-Frame 1.3 + a-game: all JavaScript, workers, controller models, fonts, and inspector bits live under **`libs/`** and **`js/`**. Clone, serve the repo root over HTTP, open the site — **no npm, no downloads, no “run a vendor script”** for anyone using or deploying the project.
+**Everything runs from this repository.** A-Frame 1.3 + a-game: JavaScript, workers, controller mirrors, fonts, and inspector assets live under **`libs/`** and **`js/`**. Clone, serve the repo root over HTTP, open the site — **no npm** for end users.
 
-See **[LIBS.md](LIBS.md)** for the exact layout and what each folder is for.
+- **[LIBS.md](LIBS.md)** — folder layout and vendored files.
+- **Procedural world** — this README focuses on how generation works and how to plug into it.
+
+---
+
+## Quick start
 
 ```bash
 python3 -m http.server 8080
-# → http://localhost:8080/              procedural world (?seed=42)
-# → http://localhost:8080/glb-room/   Maru GLB room (same local libs/)
 ```
 
-**GitHub Pages (project site):** uncomment `<base href="/REPO_NAME/">` in [`index.html`](index.html). Keep [`.nojekyll`](.nojekyll) at the repo root.
+| URL | What |
+|-----|------|
+| [http://localhost:8080/](http://localhost:8080/) | Main procedural dungeon (`index.html`) |
+| [http://localhost:8080/?seed=42](http://localhost:8080/?seed=42) | Same with fixed seed |
+| [http://localhost:8080/examples/](http://localhost:8080/examples/) | Other BSP + ridge combinations |
+| [http://localhost:8080/glb-room/](http://localhost:8080/glb-room/) | GLB room demo (shared `libs/`) |
 
-**CI / sanity check (optional):** `node scripts/verify-offline.mjs` — fails if a tracked path under `libs/` / `js/` is missing.
+**Do not open `index.html` via `file://`.** Relative URLs and the Cannon worker must be same-origin HTTP.
 
-**Upgrading dependencies (maintainers only):** refresh mirrors with `node scripts/vendor-libs.mjs`, update `libs/aframe/aframe-v1.3.0.min.js` / a-game as needed, re-apply the inspector local URL patch if you replace A-Frame (see [LIBS.md](LIBS.md)).
+**GitHub Pages (project site):** live site at `https://<user>.github.io/<repo>/`. Document-relative paths usually work without `<base>`. If anything 404s, uncomment `<base href="/A-frame-world-generator/" />` in `index.html` (match your repo name). **[`.nojekyll`](.nojekyll)** at the repo root disables Jekyll so static assets are served as-is.
 
-The folder [`A-FRAME-1.3-A-GAME-Working/`](A-FRAME-1.3-A-GAME-Working/) is an old sample and is **not** used by the root app. The archived **A-Frame 1.7** stack is in [`archive/aframe-1.7-app/`](archive/aframe-1.7-app/).
+**Optional check:** `node scripts/verify-offline.mjs` — fails if a tracked path under `libs/` / `js/` is missing.
+
+**Maintainers:** refresh vendors with `node scripts/vendor-libs.mjs`; see [LIBS.md](LIBS.md) for A-Frame / a-game upgrades.
+
+The folder [`A-FRAME-1.3-A-GAME-Working/`](A-FRAME-1.3-A-GAME-Working/) is a legacy sample, **not** used by the root app. Archived A-Frame 1.7 code is in [`archive/aframe-1.7-app/`](archive/aframe-1.7-app/).
+
+---
+
+## How procedural generation works
+
+The pipeline turns a **numeric seed** into a walkable **tile grid**, then into **`<a-box>`** entities tagged for **a-game** (`floor`, `wall`, `start`, physics, `grabbable`). Algorithms are adapted from **[world-gen](https://github.com/micknoise/world-gen)** (tutorial **03 — BSP dungeon**, **09 — ridge dungeon**).
+
+### Pipeline (high level)
+
+```text
+seed
+  │
+  ├─► generateBspDungeon(seed, opts)
+  │     Recursive BSP split → room rectangles → L-shaped corridors
+  │     Output: tiles[y][x] ∈ { 'floor', 'wall' }, markers, regions
+  │
+  ├─► WorldGenRidge.sampleRidgeGrid(W, H, seed, opts)
+  │     Ridged fbm per cell → open[y][x] boolean (passage vs solid)
+  │
+  ├─► WorldGenCombine.* (choose strategy)
+  │     e.g. carveFromBsp: grow ridge-open walls that touch BSP floor
+  │     e.g. unionFloor + floodPruneToComponent: OR masks, then one component
+  │     e.g. roomsInRidge: ridge base + BSP room rectangles stamped in
+  │
+  └─► buildAgameTileWorld(rootEl, tiles, options)
+        Merge horizontal runs of floor/wall → fewer boxes; spawn + crates + toys
+        Returns { spawnWorld, gridW, gridH, markerTile }
+```
+
+The **root** [`index.html`](index.html) uses **carve** (BSP + `carveFromBsp`). **[`examples/`](examples/)** pages document **union** and **rooms-in-ridge** with inline comments.
+
+### Coordinate systems
+
+- **Tile grid:** `tiles[row][col]` with `row` = `y` (top of map is `y = 0`), `col` = `x` (left is `x = 0`). Values are only `'floor'` or `'wall'`.
+- **World (A-Frame):** Tile center `(tx, ty)` maps to world position roughly `((tx + 0.5) * cellSize, 0, (ty + 0.5) * cellSize)` with default `cellSize = 1`. Floor boxes sit under the player’s feet; walls extend upward to `wallHeight` (default `3`).
+
+### Script load order (critical)
+
+[`index.html`](index.html) loads scripts in this order:
+
+1. `AFRAME_CDN_ROOT` inline + `js/aframe-cdn-rewrite.js` — local mirror for `cdn.aframe.io` (offline VR assets).
+2. `libs/aframe/aframe-v1.3.0.min.js`
+3. Inline: delete `AFRAME.components.grabbable` (a-game replaces it).
+4. `libs/a-game/a-game.min.js`
+5. `js/world/bsp-dungeon.js` → `generateBspDungeon`
+6. `js/world/ridge-field.js` → `WorldGenRidge`
+7. `js/world/combine-bsp-ridge.js` → `WorldGenCombine`
+8. `js/world/grid-build.js` → `buildAgameTileWorld`
+9. `js/world/generator.js` → `window.generateWorld`
+
+If you reorder or omit files, `generateWorld` will log an error and fall back to a dummy spawn.
+
+---
+
+## Public API — how to interface with generation
+
+### 1. URL / page-level (no code changes)
+
+- **`?seed=N`** on the root page — integer seed for the full chain (BSP, ridge, crate scatter). Default `1` if missing or invalid.
+
+### 2. `window.generateWorld(rootEl, seed)` — main entry
+
+Defined in [`js/world/generator.js`](js/world/generator.js).
+
+- **Arguments:** `rootEl` — DOM node (typically `#world-root`); `seed` — number (unsigned coercion inside children).
+- **Returns:** `{ spawnWorld: { x, y, z }, gridW, gridH, markerTile }` from `buildAgameTileWorld`. Use `spawnWorld` to place `<a-player>` after generation.
+- **Side effects:** Appends many elements under `rootEl`. Clear `rootEl` first if regenerating.
+
+**Regenerating at runtime:** remove children from `#world-root`, call `generateWorld` again with a new seed, move the player, then refresh a-game raycasters (see [`index.html`](index.html) `refreshRaycasters`).
+
+### 3. Lower-level building blocks
+
+Use these when you write a custom page (like [`examples/world-bsp-ridge-union/index.html`](examples/world-bsp-ridge-union/index.html)) instead of `generateWorld`.
+
+| Symbol | Module | Role |
+|--------|--------|------|
+| `generateBspDungeon(seed, opts?)` | [`bsp-dungeon.js`](js/world/bsp-dungeon.js) | BSP rooms + corridors → `tiles`, `markers`, `regions` |
+| `WorldGenRidge.sampleRidgeGrid(W,H,seed,opts?)` | [`ridge-field.js`](js/world/ridge-field.js) | `{ open, raw }` boolean + float grids |
+| `WorldGenCombine.carveFromBsp` / `unionFloor` / `roomsInRidge` / `floodPruneToComponent` | [`combine-bsp-ridge.js`](js/world/combine-bsp-ridge.js) | Merge BSP with ridge |
+| `buildAgameTileWorld(rootEl, tiles, opts?)` | [`grid-build.js`](js/world/grid-build.js) | Tiles → DOM + spawn metadata |
+
+**`generateBspDungeon` options:** `width`, `height`, `minLeafSize`, `maxDepth` — control room count and granularity.
+
+**`sampleRidgeGrid` options:** `scale` (feature size), `octaves` (detail), `threshold` in `0..1` (higher = narrower passages).
+
+**`buildAgameTileWorld` options:** `cellSize`, `wallHeight`, `floorThickness`, `markerTile`, `seed`, `includeToys`, `crateCount`.
+
+### 4. Customising the root demo
+
+Edit [`js/world/generator.js`](js/world/generator.js):
+
+- **`GRID_W` / `GRID_H`** — map size in tiles.
+- **BSP opts** — `minLeafSize`, `maxDepth`.
+- **Ridge opts** — `scale`, `octaves`, `threshold`.
+- **Combine step** — replace `carveFromBsp` with e.g. `unionFloor` + `floodPruneToComponent(tiles, mk.x, mk.y)` (copy pattern from `examples/`).
+
+Do not change the **tile string values** (`'floor'`, `'wall'`) without updating `grid-build.js` accordingly.
+
+---
+
+## Scene integration (root `index.html`)
+
+After `<a-scene>` emits `loaded`, the boot script:
+
+1. Reads `seed` from `URLSearchParams`.
+2. Calls `generateWorld(document.getElementById('world-root'), seed)`.
+3. Sets `#player` position from `spawnWorld`.
+4. Calls `refreshRaycasters` (twice, with a short delay) so a-game picks up new meshes.
+5. Disables pointer lock on desktop for friendlier embedded use.
+
+`index.html` and each `js/world/*.js` file contain **inline comments** explaining edge cases (physics worker URL, double `requestAnimationFrame`, etc.).
+
+---
+
+## Related
+
+- **Upstream tutorials & JSON shape:** [world-gen](https://github.com/micknoise/world-gen) (this repo targets a-game + merged boxes, not the tutorial `AFrameRenderer` nav-mesh path).
+- **GLB room:** [`glb-room/index.html`](glb-room/index.html) — heavily commented loader / a-game setup.

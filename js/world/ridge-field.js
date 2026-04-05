@@ -1,10 +1,34 @@
 /**
- * Ridged fractal field — adapted from github.com/micknoise/world-gen (tutorials/09-ridge-dungeon).
- * Values are in ~[0,1]; values above threshold read as open passage when sampled on a grid.
+ * @fileoverview Ridged multifractal noise sampled on a 2D grid.
+ *
+ * Adapted from github.com/micknoise/world-gen (tutorials/09-ridge-dungeon). “Ridge” noise takes
+ * the absolute value of a smooth noise around zero (creating ridges/crests), stacks octaves at
+ * doubling frequency with halving amplitude (fbm), normalizes to ~[0,1]. High values form
+ * branching corridor-like regions when thresholded — good for caves / organic tunnels.
+ *
+ * PUBLIC API (all on window.WorldGenRidge)
+ * ---------------------------------------
+ *   ridgedFbm(x, y, seed, octaves) — continuous field; x,y in “noise space” (not tile indices).
+ *   sampleRidgeGrid(W, H, seed, opts?) — discrete W×H arrays:
+ *       returns { open: boolean[][], raw: number[][], width, height }
+ *       open[y][x] === true where raw value > threshold (default 0.58).
+ *   makeRidgeFieldFn(seed, scale, octaves) — returns (col,row) => value for lazy sampling.
+ *
+ * PARAMETERS (sampleRidgeGrid opts)
+ * ---------------------------------
+ *   scale  — larger → smoother, wider features in tile space (noise input is x/scale, y/scale).
+ *   octaves — more → finer branching (1..8 clamped); cost is O(W*H*octaves).
+ *   threshold — in (0,1); higher → narrower passages, lower → wider chambers / more floor.
+ *
+ * RELATION TO BSP
+ * ---------------
+ * Ridge is independent of BSP: same seed still correlates both if you drive both from seed, but
+ * ridge values are purely spatial noise — combine-bsp-ridge.js decides how to merge with BSP tiles.
  */
 (function () {
   'use strict';
 
+  /** Value noise on a grid with smoothstep interpolation (classic shader-style hash). */
   function vnoise(x, y, seed) {
     var xi = Math.floor(x);
     var yi = Math.floor(y);
@@ -23,6 +47,9 @@
     return n00 + (n10 - n00) * sx + (n01 - n00) * sy + (n00 - n10 - n01 + n11) * sx * sy;
   }
 
+  /**
+   * Ridged fbm: each octave uses (1 - |2*n-1|) style ridge on vnoise, weighted sum / normalized.
+   */
   function ridgedFbm(x, y, seed, octaves) {
     var v = 0;
     var amp = 1;
@@ -67,6 +94,7 @@
     return { open: open, raw: raw, width: W, height: H };
   }
 
+  /** Lazy evaluator: col,row should be tile indices; divides by scale internally. */
   function makeRidgeFieldFn(seed, scale, octaves) {
     return function (col, row) {
       return ridgedFbm(col / scale, row / scale, seed, octaves);

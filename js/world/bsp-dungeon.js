@@ -1,10 +1,35 @@
 /**
- * BSP dungeon grid generator — logic adapted from github.com/micknoise/world-gen
- * (tutorials/03-bsp-dungeon). Produces tile grids compatible with combine + grid-build.
+ * @fileoverview Binary space partition (BSP) dungeon on a rectangular tile grid.
+ *
+ * Adapted from github.com/micknoise/world-gen (tutorials/03-bsp-dungeon). Same idea as classic
+ * roguelike BSP: recursively split an axis-aligned rectangle into smaller rectangles until leaves
+ * are small enough; carve a room in each leaf; connect sibling subtrees with L-shaped corridors
+ * (first horizontal, then vertical) so the whole dungeon is one connected floor graph.
+ *
+ * COORDINATE SYSTEM
+ * -----------------
+ * - Output tiles is row-major: tiles[y][x] where y = 0 is the top row of the grid, x = 0 is left.
+ * - World mapping (in grid-build.js): world X aligns with tile x, world Z aligns with tile y.
+ * - Outer border (x=0, x=width-1, y=0, y=height-1) stays wall; carving happens in the inset
+ *   rectangle from (1,1) with size (width-2, height-2) so there is always a solid rim.
+ *
+ * PUBLIC API
+ * ----------
+ *   generateBspDungeon(seed, opts?)
+ *     opts: { width, height, minLeafSize, maxDepth } — all optional with sensible defaults.
+ *     returns: { tiles, width, height, markers, regions, nodes }
+ *       - markers[0]: { kind:'start', x, y } tile coords for first room center (integer grid coords).
+ *       - regions: BSP leaf room rectangles { x, y, width, height } in tile space.
+ *
+ * RNG
+ * ---
+ * Seeded deterministic PRNG (same pattern as mulberry32-style mixing) — same seed → same dungeon
+ * if width/height/params match.
  */
 (function () {
   'use strict';
 
+  /** Deterministic float in [0,1) and int in [min,max] for room placement and splits. */
   function createRng(seed) {
     var state = (Number(seed) >>> 0) || 1;
     return {
@@ -30,10 +55,15 @@
     return rows;
   }
 
+  /** BSP tree node: axis-aligned rectangle in tile space at given recursion depth. */
   function makeNode(x, y, width, height, depth) {
     return { x: x, y: y, width: width, height: height, depth: depth, left: null, right: null, room: null, center: null };
   }
 
+  /**
+   * Recursively split the node with a random partition line (vertical = left|right children,
+   * horizontal = top|bottom). Stops when maxDepth reached or rectangle too small to split twice.
+   */
   function splitNode(node, random, minLeafSize, maxDepth) {
     var canSplitWide = node.width >= minLeafSize * 2;
     var canSplitTall = node.height >= minLeafSize * 2;
@@ -66,6 +96,7 @@
     if (node.right) gatherLeaves(node.right, leaves);
   }
 
+  /** Random rectangle room strictly inside the leaf, at least 4×4 where possible. */
   function carveRoom(node, random) {
     var maxRoomWidth = Math.max(4, node.width - 2);
     var maxRoomHeight = Math.max(4, node.height - 2);
@@ -85,6 +116,7 @@
     }
   }
 
+  /** Axis-aligned L path: move in X until aligned with end, then in Y (tutorial 03 convention). */
   function carveCorridor(tiles, start, end) {
     var x = start.x;
     var y = start.y;
@@ -99,6 +131,7 @@
     if (tiles[y] && tiles[y][x] !== undefined) tiles[y][x] = 'floor';
   }
 
+  /** Post-order walk: connect each pair of child subtrees; propagate a center up the tree. */
   function connectTree(node, tiles) {
     if (!node.left && !node.right) return node.center;
     var leftCenter = connectTree(node.left, tiles);
@@ -114,7 +147,7 @@
   /**
    * @param {number} seed
    * @param {{ width?: number, height?: number, minLeafSize?: number, maxDepth?: number }} [opts]
-   * @returns {{ tiles: string[][], width: number, height: number, markers: Array<{kind:string,x:number,y:number}>, regions: object[] }}
+   * @returns {{ tiles: string[][], width: number, height: number, markers: Array<{kind:string,x:number,y:number}>, regions: object[], nodes: object[] }}
    */
   function generateBspDungeon(seed, opts) {
     opts = opts || {};

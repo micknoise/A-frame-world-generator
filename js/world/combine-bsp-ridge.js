@@ -1,6 +1,31 @@
 /**
- * Ways to merge BSP dungeon tiles with ridge noise masks.
- * BSP gives readable rooms/corridors; ridge adds organic cave-like branching.
+ * @fileoverview Merge strategies for BSP tile maps and ridge boolean masks.
+ *
+ * BSP tiles and ridge.open must be the same dimensions: ridgeOpen[y][x] aligns with bspTiles[y][x].
+ * All functions return new tile grids (strings 'floor' | 'wall') unless noted.
+ *
+ * PUBLIC API (window.WorldGenCombine)
+ * -----------------------------------
+ *   unionFloor(bspTiles, ridgeOpen)
+ *     Walkable if BSP floor OR ridge-open. Tends to add detached caverns — pair with
+ *     floodPruneToComponent from the intended spawn to keep one playable region.
+ *
+ *   carveFromBsp(bspTiles, ridgeOpen, passes?)
+ *     Start from BSP. Each pass: wall → floor if ridgeOpen AND 4-neighbor touches floor.
+ *     Default passes=2. Organic “growth” stays attached to the structured dungeon.
+ *
+ *   roomsInRidge(regions, ridgeOpen, width, height)
+ *     Start from ridge-only floor mask, then OR every BSP leaf rectangle (regions) to floor.
+ *     Corridors from BSP are not applied — connectivity is ridge + stamped rooms. See examples/.
+ *
+ *   floodPruneToComponent(tiles, sx, sy)
+ *     BFS from tile (sx,sy); only that connected floor component survives. sx,sy must be floor.
+ *
+ * DESIGN NOTES
+ * ------------
+ * - 4-neighborhood only (no diagonals) — consistent with corridor carving and BFS.
+ * - For union + prune, use BSP marker tile (e.g. markers[0].x/y) as BFS start so the player’s
+ *   component always includes the designed spawn room.
  */
 (function () {
   'use strict';
