@@ -56,11 +56,11 @@
       <p class="ref">Flat ceiling variant: <a href="../world-sdf-bsp-dungeon/">world-sdf-bsp-dungeon</a></p>
       <h2>Cavern dome + displacement luminance</h2>
       <label>Seed <input type="number" id="seed" value="1"></label>
-      <label>Grid W <input type="number" id="gridW" value="25" min="16" max="72"></label>
-      <label>Grid H <input type="number" id="gridH" value="15" min="12" max="72"></label>
+      <label>Grid W <input type="number" id="gridW" value="40" min="16" max="72"></label>
+      <label>Grid H <input type="number" id="gridH" value="34" min="16" max="72"></label>
       <label>Dome lift <input type="range" id="domeAmp" min="1.5" max="10" step="0.1" value="6"><span id="domeAmpVal">6</span></label>
       <label>Dome tightness <input type="range" id="domeFall" min="0.45" max="5" step="0.05" value="2.2"><span id="domeFallVal">2.2</span></label>
-      <label>Ceiling detail <input type="range" id="ceilDet" min="0" max="3" step="0.02" value="0.54"><span id="ceilDetVal">0.54</span></label>
+      <label>Ceiling detail <input type="range" id="ceilDet" min="0" max="0.55" step="0.02" value="0"><span id="ceilDetVal">0</span></label>
       <label>Smooth union (× cell) <input type="range" id="smoothK" min="0.15" max="2.1" step="0.02" value="0.85"><span id="smoothKVal">0.85</span></label>
       <label>Voxel step <input type="range" id="voxelStep" min="0.38" max="0.85" step="0.02" value="0.84"><span id="voxelStepVal">0.84</span></label>
       <label>Surface bump <input type="range" id="surfDisp" min="0.06" max="0.22" step="0.01" value="0.22"><span id="surfDispVal">0.22</span></label>
@@ -244,9 +244,6 @@
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
           ceilingDetailScale: 0.1,
           albedoMode: 'luminance',
-          luminanceDarkBase: 0.056,
-          luminanceMaxBoost: 0.2,
-          luminanceHighFreqMix: 0.34,
           grainStyle: 'none',
           materialRoughness: 0.95,
           materialMetalness: 0
