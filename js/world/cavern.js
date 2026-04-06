@@ -153,6 +153,36 @@
     return out;
   }
 
+  // ── Cellular (Voronoi) noise for cracked stone blocks ────────────────────
+
+  function hash2D(ix, iy, w) {
+    var h = (Math.imul(ix, 1619) + Math.imul(iy, 31337) + Math.imul(w, 6947)) | 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+
+  // Returns F1/F2 distances and the seed point of the nearest cell.
+  function cellNoise(x, y) {
+    var ix = Math.floor(x), iy = Math.floor(y);
+    var F1sq = 1e9, F2sq = 1e9, sx = 0, sy = 0;
+    for (var jy = -1; jy <= 1; jy++) {
+      for (var jx = -1; jx <= 1; jx++) {
+        var cx = ix + jx + hash2D(ix + jx, iy + jy, 0);
+        var cy = iy + jy + hash2D(ix + jx, iy + jy, 1);
+        var dx = x - cx, dy = y - cy, dsq = dx * dx + dy * dy;
+        if (dsq < F1sq) { F2sq = F1sq; F1sq = dsq; sx = cx; sy = cy; }
+        else if (dsq < F2sq) { F2sq = dsq; }
+      }
+    }
+    return { F1: Math.sqrt(F1sq), F2: Math.sqrt(F2sq), sx: sx, sy: sy };
+  }
+
+  function smoothstep(x, lo, hi) {
+    var t = Math.max(0, Math.min(1, (x - lo) / (hi - lo)));
+    return t * t * (3 - 2 * t);
+  }
+
   // ── Geometry: displace + colour ───────────────────────────────────────────
 
   function gradient(sdf, px, py, pz) {
@@ -196,14 +226,35 @@
       // Recompute normal at displaced position
       var gn = gradient(sdf, px, py, pz);
 
-      // Rock strata: horizontal sine bands, warped by low-freq noise so they
-      // look geological rather than perfectly flat. Runs 0→1→0 per layer.
-      var warp   = noise.fbm(px * 0.06, pz * 0.06, 2) * 3.5;
-      var strata = 0.5 + 0.5 * Math.sin((py * 1.1 + warp) * Math.PI);
+      // Rock strata: large-scale horizontal bands (geological layers)
+      var strataWarp = noise.fbm(px * 0.06, pz * 0.06, 2) * 3.5;
+      var strata = 0.5 + 0.5 * Math.sin((py * 1.1 + strataWarp) * Math.PI);
 
-      // Triplanar noise drives surface grain; strata drives layering
-      var colorN = n01 * 0.45 + strata * 0.55;
-      var c = 0.04 + colorN * 0.36; // range 0.04 (dark seam) → 0.40 (pale band)
+      // Cracked stone blocks via domain-warped Voronoi, triplanar projected.
+      // Domain warp breaks up grid regularity so blocks don't tile.
+      var st = 0.55; // ~1.8 world units per stone block
+      var wu = (noise.fbm(px * 0.19 + 3.1, pz * 0.19 + 7.4, 2) - 0.5) * 2.0;
+      var wv = (noise.fbm(px * 0.19 + 11.3, pz * 0.19 + 2.8, 2) - 0.5) * 2.0;
+
+      var cY = cellNoise((px + wu) * st, (pz + wv) * st);
+      var cX = cellNoise((py + wu) * st, (pz + wv) * st);
+      var cZ = cellNoise((px + wu) * st, (py + wv) * st);
+
+      // F2 − F1 is smallest at cell boundaries (the crack seam); smooth to 0 there
+      var crack = wy * smoothstep(cY.F2 - cY.F1, 0, 0.22)
+                + wx * smoothstep(cX.F2 - cX.F1, 0, 0.22)
+                + wz * smoothstep(cZ.F2 - cZ.F1, 0, 0.22);
+
+      // Per-stone tone: fbm sampled at each cell's seed point so every block is unique
+      var tone = wy * noise.fbm(cY.sx * 0.15, cY.sy * 0.15, 2)
+               + wx * noise.fbm(cX.sx * 0.15, cX.sy * 0.15, 2)
+               + wz * noise.fbm(cZ.sx * 0.15, cZ.sy * 0.15, 2);
+
+      // Stone surface brightness = strata + per-block tone + fine noise grain
+      var surface = strata * 0.35 + tone * 0.40 + n01 * 0.25;
+
+      // Seams are near-black; stone faces range from dark to pale
+      var c = crack * (0.06 + surface * 0.30) + (1.0 - crack) * 0.025;
 
       pos[i * 3]     = px;    pos[i * 3 + 1]  = py;    pos[i * 3 + 2]  = pz;
       col[i * 3]     = c;     col[i * 3 + 1]  = c;     col[i * 3 + 2]  = c;
