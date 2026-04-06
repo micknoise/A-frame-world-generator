@@ -3,9 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Noise terrain — fly mode (no a-game)</title>
+    <title>Noise terrain — fly mode (A-Frame 1.3 + a-game)</title>
     <link rel="icon" href="data:," />
+    <script>
+      window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
+    </script>
+    <script src="../../js/aframe-cdn-rewrite.js"></script>
     <script src="../../libs/aframe/aframe-v1.3.0.min.js"></script>
+    <script>
+      if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
+        delete AFRAME.components.grabbable;
+      }
+    </script>
+    <script src="../../libs/a-game/a-game.min.js"></script>
     <script src="../../js/world/noise-terrain.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,14 +28,8 @@
         border: 1px solid rgba(200,230,201,0.15);
         max-width: 330px; font-size: 13px; line-height: 1.55;
       }
-      #hud h2 {
-        font-size: 14px; margin-bottom: 10px; color: #a5d6a7;
-        letter-spacing: 0.5px; font-weight: 600;
-      }
-      #hud label {
-        display: flex; justify-content: space-between; align-items: center;
-        margin: 3px 0;
-      }
+      #hud h2 { font-size: 14px; margin-bottom: 10px; color: #a5d6a7; letter-spacing: 0.5px; font-weight: 600; }
+      #hud label { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; }
       #hud label span { min-width: 30px; text-align: right; }
       #hud input[type=range] { width: 130px; accent-color: #66bb6a; }
       #hud input[type=number] {
@@ -41,7 +45,7 @@
       }
       #hud button:hover { background: #388e3c; }
       .hint { font-size: 11px; color: #81c784; margin-top: 8px; opacity: 0.65; }
-      .fly-note { font-size: 11px; color: #aed581; margin-bottom: 8px; opacity: 0.9; }
+      .fly-note { font-size: 11px; color: #aed581; margin-bottom: 8px; opacity: 0.9; line-height: 1.45; }
       .fly-note a { color: #c5e1a5; }
 
       #legend {
@@ -60,8 +64,11 @@
   <body>
 
     <div id="hud">
-      <p class="fly-note">Fly-only demo. For <strong>a-game</strong> + locomotion use <a href="./">index.html</a>.</p>
-      <h2>Noise Terrain Generator</h2>
+      <p class="fly-note">
+        Same terrain pipeline as <a href="./">index.html</a>; <strong>fly camera</strong> instead of a-game
+        locomotion (WASD + mouse look).
+      </p>
+      <h2>Noise Terrain</h2>
       <label>Seed <input type="number" id="seed" value="42"></label>
       <label>Grid Size <input type="range" id="gridSize" min="64" max="512" step="16" value="256"><span id="gridSizeVal">256</span></label>
       <label>World Scale <input type="range" id="worldScale" min="50" max="500" step="10" value="200"><span id="worldScaleVal">200</span></label>
@@ -71,7 +78,7 @@
       <label>Water Level <input type="range" id="waterLevel" min="0" max="60" step="1" value="30"><span id="waterLevelVal">30%</span></label>
       <label>Island Falloff <input type="range" id="falloff" min="0" max="100" step="1" value="50"><span id="falloffVal">50%</span></label>
       <button id="generateBtn">&#9654; Generate Terrain</button>
-      <div class="hint">WASD to move · Click to capture mouse · Esc to release</div>
+      <div class="hint">WASD to move · Click to capture · Esc to release · ?seed=N in URL</div>
     </div>
 
     <div id="legend">
@@ -85,20 +92,27 @@
       <div><span class="sw" style="background:#f0f0f0"></span>Snow</div>
     </div>
 
+    <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
     <a-scene
+      id="scene"
       renderer="antialias: true; colorManagement: true; sortObjects: true"
       fog="type: exponential; color: #87CEEB; density: 0.0015"
+      physics="workerUrl: ../../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
       vr-mode-ui="enabled: false"
       loading-screen="enabled: false"
     >
+      <a-assets></a-assets>
       <a-sky color="#87CEEB"></a-sky>
       <a-light type="ambient" color="#BBD2E0" intensity="0.5"></a-light>
-      <a-light type="directional" color="#FFF5E0" intensity="1.2" position="1 1.5 0.5"></a-light>
+      <a-light type="directional" color="#FFF5E0" intensity="1.05" position="1 2 0.6"></a-light>
 
-      <a-entity id="rig" position="0 60 0">
+      <a-entity id="world-root"></a-entity>
+
+      <!-- Same NoiseTerrain.build target as index.html; fly rig instead of <a-player>. -->
+      <a-entity id="fly-rig" position="0 0 0">
         <a-entity
           camera
-          look-controls="pointerLockEnabled: true"
+          look-controls="pointerLockEnabled: true; touchEnabled: false"
           wasd-controls="acceleration: 80; fly: true"
           position="0 1.6 0"
         ></a-entity>
@@ -106,6 +120,22 @@
     </a-scene>
 
     <script>
+      window.addEventListener('unhandledrejection', function (event) {
+        var name = event.reason && event.reason.name;
+        var msg = String((event.reason && event.reason.message) || event.reason || '');
+        if (name === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1) {
+          event.preventDefault();
+        }
+      });
+
+      function refreshRaycasters(rootScene) {
+        var nodes = rootScene.querySelectorAll('[raycaster]');
+        for (var i = 0; i < nodes.length; i++) {
+          var rc = nodes[i].components && nodes[i].components.raycaster;
+          if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
+        }
+      }
+
       ['gridSize','worldScale','heightScale','noiseScale','octaves','waterLevel','falloff']
         .forEach(function (id) {
           var el = document.getElementById(id);
@@ -133,42 +163,37 @@
       var qs = new URLSearchParams(location.search).get('seed');
       if (qs != null) document.getElementById('seed').value = parseInt(qs, 10) || 42;
 
-      var terrainGroup = null;
+      var sceneEl = document.getElementById('scene');
 
       function rebuildTerrain() {
-        var scene = document.querySelector('a-scene');
-        if (terrainGroup) {
-          scene.object3D.remove(terrainGroup);
-          terrainGroup.traverse(function (obj) {
-            if (obj.geometry) obj.geometry.dispose();
-            if (obj.material) {
-              if (obj.material.map) obj.material.map.dispose();
-              obj.material.dispose();
-            }
-          });
-        }
-        terrainGroup = new AFRAME.THREE.Group();
-        scene.object3D.add(terrainGroup);
+        var root = document.getElementById('world-root');
+        var data = NoiseTerrain.build(root, readParams());
 
-        var wrapper = { object3D: terrainGroup };
-        var data = NoiseTerrain.build(wrapper, readParams());
+        /* Hover above spawn: same horizontal origin as walking mode; Y = feet + clearance for fly. */
+        var flyClear = Math.max(40, data.heightScale * 0.85);
+        var rig = document.getElementById('fly-rig');
+        rig.setAttribute('position', {
+          x: data.spawnWorld.x,
+          y: data.spawnWorld.y + flyClear,
+          z: data.spawnWorld.z
+        });
 
-        var rig = document.getElementById('rig');
-        var base = Math.max(data.centerY, data.heightAtOrigin);
-        var rigY = base + Math.max(25, data.heightScale * 0.9);
-        rig.setAttribute('position', '0 ' + rigY + ' 0');
+        requestAnimationFrame(function () {
+          refreshRaycasters(sceneEl);
+          setTimeout(function () { refreshRaycasters(sceneEl); }, 120);
+          setTimeout(function () { refreshRaycasters(sceneEl); }, 500);
+        });
       }
 
       document.getElementById('generateBtn').addEventListener('click', rebuildTerrain);
 
-      var scene = document.querySelector('a-scene');
-      if (scene.hasLoaded) {
-        setTimeout(rebuildTerrain, 100);
-      } else {
-        scene.addEventListener('loaded', function () {
-          setTimeout(rebuildTerrain, 100);
-        }, { once: true });
-      }
+      sceneEl.addEventListener('loaded', function () {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            rebuildTerrain();
+          });
+        });
+      }, { once: true });
     </script>
   </body>
 </html>
