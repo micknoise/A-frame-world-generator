@@ -318,13 +318,17 @@
     rootEl.appendChild(el);
     el.setObject3D('mesh', mesh);
 
-    // Find a floor tile for spawn
-    var spx = CS * 0.5, spz = CS * 0.5, found = false;
-    for (var sy = 0; sy < H && !found; sy++)
-      for (var sx = 0; sx < W && !found; sx++)
-        if (tiles[sy][sx] === 'floor') { spx = (sx + 0.5) * CS; spz = (sy + 0.5) * CS; found = true; }
+    // Spawn at the centre of the first BSP room — always a valid floor area
+    var r0   = rooms[0];
+    var spx  = (r0.x + r0.width  * 0.5) * CS;
+    var spz  = (r0.y + r0.height * 0.5) * CS;
 
-    return { spawnWorld: { x: spx, y: 1.2, z: spz } };
+    // Scan up to find the actual displaced floor surface
+    var spy = 0.05;
+    while (spy < WH && sdf(spx, spy, spz) <= 0) spy += 0.05;
+    spy += 0.4; // stand above it
+
+    return { spawnWorld: { x: spx, y: spy, z: spz } };
   }
 
   window.buildCavern = build;
