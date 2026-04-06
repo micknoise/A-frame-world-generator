@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BSP smin cavern — dome + noise-dungeon luminance</title>
+    <title>BSP cavern — smin + arch + rock noise</title>
     <link rel="icon" href="data:," />
     <script>
       window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
@@ -18,67 +18,47 @@
     <script src="../../libs/a-game/a-game.min.js"></script>
     <script src="../../js/world/mc-tables.js"></script>
     <script src="../../js/world/bsp-dungeon.js"></script>
-    <script src="../../js/world/sdf-bsp-dungeon.js"></script>
+    <script src="../../js/world/cavern.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { overflow: hidden; background: #000; font-family: system-ui, -apple-system, sans-serif; }
-
+      body { overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
       #hud {
         position: fixed; top: 16px; left: 16px; z-index: 10;
         background: rgba(0,0,0,0.78); color: #dce8f0; padding: 16px 20px;
-        border-radius: 8px; backdrop-filter: blur(8px);
-        border: 1px solid rgba(200,220,240,0.12);
-        max-width: 340px; font-size: 13px; line-height: 1.55;
+        border-radius: 8px; border: 1px solid rgba(200,220,240,0.12);
+        max-width: 300px; font-size: 13px; line-height: 1.6;
       }
-      #hud h2 { font-size: 14px; margin-bottom: 10px; color: #b0c4de; letter-spacing: 0.5px; font-weight: 600; }
+      #hud h2 { font-size: 14px; margin-bottom: 10px; color: #b0c4de; font-weight: 600; }
       #hud label { display: flex; justify-content: space-between; align-items: center; margin: 3px 0; }
-      #hud label span { min-width: 30px; text-align: right; }
-      #hud input[type=range] { width: 120px; accent-color: #90caf9; }
-      #hud input[type=number] {
-        width: 55px; background: rgba(255,255,255,0.06);
+      #hud label span { min-width: 32px; text-align: right; }
+      #hud input[type=range]  { width: 110px; accent-color: #90caf9; }
+      #hud input[type=number] { width: 55px; background: rgba(255,255,255,0.06);
         border: 1px solid rgba(200,220,240,0.18); color: #dce8f0;
-        padding: 2px 6px; border-radius: 4px; font-family: inherit; font-size: 12px;
-      }
-      #hud button {
-        margin-top: 10px; width: 100%; padding: 8px;
+        padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+      #hud button { margin-top: 10px; width: 100%; padding: 8px;
         background: #1565c0; color: #e3f2fd; border: none;
-        border-radius: 6px; cursor: pointer; font-family: inherit;
-        font-size: 13px; letter-spacing: 0.3px; transition: background 0.15s;
-      }
+        border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.15s; }
       #hud button:hover { background: #1976d2; }
-      .hint { font-size: 11px; color: #90a4ae; margin-top: 8px; opacity: 0.85; line-height: 1.45; }
-      .ref { font-size: 11px; color: #81d4fa; margin-bottom: 8px; }
-      .ref a { color: #b3e5fc; }
     </style>
   </head>
   <body>
     <div id="hud">
-      <p class="ref">Flat ceiling variant: <a href="../world-sdf-bsp-dungeon/">world-sdf-bsp-dungeon</a></p>
-      <h2>Cavern dome + displacement luminance</h2>
-      <label>Seed <input type="number" id="seed" value="1"></label>
-      <label>Grid W <input type="number" id="gridW" value="40" min="16" max="72"></label>
-      <label>Grid H <input type="number" id="gridH" value="34" min="16" max="72"></label>
-      <label>Dome lift <input type="range" id="domeAmp" min="1.5" max="10" step="0.1" value="6"><span id="domeAmpVal">6</span></label>
-      <label>Dome tightness <input type="range" id="domeFall" min="0.45" max="5" step="0.05" value="2.2"><span id="domeFallVal">2.2</span></label>
-      <label>Ceiling detail <input type="range" id="ceilDet" min="0" max="0.55" step="0.02" value="0"><span id="ceilDetVal">0</span></label>
-      <label>Smooth union (× cell) <input type="range" id="smoothK" min="0.15" max="2.1" step="0.02" value="0.85"><span id="smoothKVal">0.85</span></label>
-      <label>Voxel step <input type="range" id="voxelStep" min="0.38" max="0.85" step="0.02" value="0.84"><span id="voxelStepVal">0.84</span></label>
-      <label>Surface bump <input type="range" id="surfDisp" min="0.06" max="0.22" step="0.01" value="0.22"><span id="surfDispVal">0.22</span></label>
-      <div style="font-size:10px;color:#78909c;margin-top:4px;">Bump scales floor / wall / ceiling like noise dungeon (0.12 / 0.35 / 0.25 at ref 0.09).</div>
-      <button id="generateBtn">&#9654; Regenerate</button>
-      <div class="hint">
-        Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
-        corridors). Hard ceiling cut vs wall tops. Dark albedo: value-noise ≤20% lift, then triplanar
-        photo luminance multiplies (~0.26–1×) so strata show. Serve over http(s); file:// breaks texture read.
-        Ambient + view directional + torch.
-      </div>
+      <h2>BSP Cavern</h2>
+      <label>Seed        <input type="number" id="seed"     value="1"></label>
+      <label>Grid W      <input type="number" id="gridW"    value="40" min="16" max="72"></label>
+      <label>Grid H      <input type="number" id="gridH"    value="34" min="16" max="72"></label>
+      <label>Dome lift   <input type="range"  id="domeAmp"  min="1.5" max="10"  step="0.1" value="6">  <span id="domeAmpV">6</span></label>
+      <label>Dome fall   <input type="range"  id="domeFall" min="0.5" max="5"   step="0.05" value="2.2"><span id="domeFallV">2.2</span></label>
+      <label>Smooth K    <input type="range"  id="smoothK"  min="0.15" max="2.1" step="0.02" value="0.85"><span id="smoothKV">0.85</span></label>
+      <label>Voxel step  <input type="range"  id="voxelStep" min="0.38" max="0.85" step="0.02" value="0.84"><span id="voxelStepV">0.84</span></label>
+      <button id="genBtn">&#9654; Regenerate</button>
     </div>
 
     <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
 
     <a-scene
       id="scene"
-      renderer="antialias: true; colorManagement: true; sortObjects: true"
+      renderer="antialias: true; colorManagement: true"
       physics="workerUrl: ../../libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
       vr-mode-ui="enabled: false"
       loading-screen="enabled: false"
@@ -86,253 +66,114 @@
       <a-assets></a-assets>
       <a-light type="ambient" color="#020504" intensity="0.01"></a-light>
       <a-sky color="#000000"></a-sky>
-
       <a-entity id="world-root"></a-entity>
       <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
     </a-scene>
 
     <script>
-      window.addEventListener('unhandledrejection', function (event) {
-        var name = event.reason && event.reason.name;
-        var msg = String((event.reason && event.reason.message) || event.reason || '');
-        if (name === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1) {
-          event.preventDefault();
-        }
+      window.addEventListener('unhandledrejection', function (e) {
+        var msg = String((e.reason && e.reason.message) || e.reason || '');
+        if ((e.reason && e.reason.name) === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1)
+          e.preventDefault();
       });
 
-      function refreshRaycasters(rootScene) {
-        var nodes = rootScene.querySelectorAll('[raycaster]');
-        for (var i = 0; i < nodes.length; i++) {
-          var rc = nodes[i].components && nodes[i].components.raycaster;
-          if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
-        }
-      }
-
-      function relaxPointerLockOnCamera(rootScene) {
-        var cam = rootScene.querySelector('a-camera');
-        if (!cam) return;
-        cam.setAttribute('look-controls', { pointerLockEnabled: false, touchEnabled: false });
-      }
-
-      ['domeAmp', 'domeFall', 'ceilDet', 'smoothK', 'voxelStep', 'surfDisp'].forEach(function (id) {
+      // Live-update range labels
+      ['domeAmp', 'domeFall', 'smoothK', 'voxelStep'].forEach(function (id) {
         var el = document.getElementById(id);
-        var val = document.getElementById(id + 'Val');
-        el.addEventListener('input', function () { val.textContent = el.value; });
+        el.addEventListener('input', function () { document.getElementById(id + 'V').textContent = el.value; });
       });
 
-      var qs = new URLSearchParams(location.search).get('seed');
-      if (qs != null) document.getElementById('seed').value = parseInt(qs, 10) || 1;
+      var CS = 3, WH = 3.5;
+      var _spot = null, _target = null, _spotDir = null, _spotQ = null;
 
-      var sceneEl = document.getElementById('scene');
-      var CS = 3;
-      var WH = 3.5;
-      var animStarted = false;
-      var wallTexSamplers = null;
-      var wallTexLoadDone = false;
-      var wallTexLoadStarted = false;
-      var wallTexLoadCallbacks = [];
-
-      function loadWallTexSamplers(callback) {
-        if (wallTexLoadDone) {
-          callback(wallTexSamplers);
-          return;
-        }
-        wallTexLoadCallbacks.push(callback);
-        if (wallTexLoadStarted) return;
-        wallTexLoadStarted = true;
-
-        var rel = ['textures/wall-1.png', 'textures/wall-2.png', 'textures/wall-3.png', 'textures/wall-4.png'];
-        var imgs = new Array(rel.length);
-        var left = rel.length;
-        rel.forEach(function (name, i) {
-          var im = new Image();
-          /* Omit crossOrigin for same-origin http(s); "anonymous" + missing ACAO can taint canvas and break getImageData. */
-          im.onload = function () {
-            imgs[i] = im;
-            if (--left === 0) finish();
-          };
-          im.onerror = function () {
-            imgs[i] = null;
-            if (--left === 0) finish();
-          };
-          im.src = new URL(name, document.baseURI).href;
-        });
-        function finish() {
-          wallTexSamplers = SdfBspDungeon.createWallTexSamplersFromImages(imgs.filter(Boolean));
-          wallTexLoadDone = true;
-          if (!wallTexSamplers || !wallTexSamplers.length) {
-            console.warn(
-              'world-sdf-bsp-cavern: no wall textures loaded (check paths under examples/world-sdf-bsp-cavern/textures/, use http server, not file://).'
-            );
-          }
-          var cbs = wallTexLoadCallbacks;
-          wallTexLoadCallbacks = [];
-          for (var ci = 0; ci < cbs.length; ci++) cbs[ci](wallTexSamplers);
-        }
-      }
-
-      /* Spot light and target are THREE.js objects added directly to the scene graph */
-      var _spotLight = null;
-      var _spotTarget = null;
-      var _spotDir = null;
-      var _spotWorldQ = null;
-      var _cameraDirLightEl = null;
-
-      /* A-Frame directional on the camera (-Z = view axis) so nearby surfaces in front read clearly. */
-      function ensureCameraDirectionalLight(camEl) {
-        if (_cameraDirLightEl || !camEl) return;
-        var fill = document.createElement('a-entity');
-        fill.setAttribute('id', 'camera-forward-directional');
-        fill.setAttribute('position', '0 0.06 0');
-        fill.setAttribute('light', {
-          type: 'directional',
-          color: '#f0e6dc',
-          intensity: 0.32,
-          castShadow: false
-        });
-        camEl.appendChild(fill);
-        _cameraDirLightEl = fill;
-      }
-
-      function ensureHoverLight() {
-        if (_spotLight) return;
+      function ensureSpotlight() {
+        if (_spot) return;
         var THREE = AFRAME.THREE;
-        var sceneObj = document.getElementById('scene').object3D;
-        _spotLight = new THREE.SpotLight(0xc4601a, 0.75, 24, Math.PI * 0.38, 0.55, 2);
-        _spotTarget = new THREE.Object3D();
-        sceneObj.add(_spotLight);
-        sceneObj.add(_spotTarget);
-        _spotLight.target = _spotTarget;
+        var s = document.getElementById('scene').object3D;
+        _spot    = new THREE.SpotLight(0xc4601a, 0.75, 24, Math.PI * 0.38, 0.55, 2);
+        _target  = new THREE.Object3D();
         _spotDir = new THREE.Vector3();
-        _spotWorldQ = new THREE.Quaternion();
+        _spotQ   = new THREE.Quaternion();
+        s.add(_spot); s.add(_target);
+        _spot.target = _target;
       }
 
-      function startLightMotion() {
-        if (animStarted) return;
-        animStarted = true;
-        ensureHoverLight();
-        function frame(now) {
-          if (!_spotLight) { requestAnimationFrame(frame); return; }
-          var t = now * 0.001;
-          var camEl = document.getElementById('scene').querySelector('a-camera');
-          if (camEl && camEl.object3D) {
-            ensureCameraDirectionalLight(camEl);
-            /* Move spot light to camera world position */
-            camEl.object3D.getWorldPosition(_spotLight.position);
-            /* Aim target along camera's world forward (-Z) */
-            camEl.object3D.getWorldQuaternion(_spotWorldQ);
-            _spotDir.set(0, 0, -1).applyQuaternion(_spotWorldQ);
-            _spotTarget.position.copy(_spotLight.position).addScaledVector(_spotDir, 10);
-            _spotTarget.updateMatrixWorld();
+      function startTorch() {
+        ensureSpotlight();
+        var running = false;
+        if (running) return;
+        running = true;
+        (function frame(now) {
+          if (!_spot) { requestAnimationFrame(frame); return; }
+          var t   = now * 0.001;
+          var cam = document.getElementById('scene').querySelector('a-camera');
+          if (cam && cam.object3D) {
+            cam.object3D.getWorldPosition(_spot.position);
+            cam.object3D.getWorldQuaternion(_spotQ);
+            _spotDir.set(0, 0, -1).applyQuaternion(_spotQ);
+            _target.position.copy(_spot.position).addScaledVector(_spotDir, 10);
+            _target.updateMatrixWorld();
           }
-          /* Torch flicker */
-          var flicker =
-            Math.sin(t * 7.3)  * 0.10 +
-            Math.sin(t * 13.7) * 0.06 +
-            Math.sin(t * 23.1) * 0.04 +
-            Math.sin(t * 47.3) * 0.02;
-          _spotLight.intensity = Math.max(0.2, 0.75 * (1 + flicker));
+          var flicker = Math.sin(t * 7.3) * 0.10 + Math.sin(t * 13.7) * 0.06 + Math.sin(t * 23.1) * 0.04;
+          _spot.intensity = Math.max(0.2, 0.75 * (1 + flicker));
           requestAnimationFrame(frame);
-        }
-        requestAnimationFrame(frame);
+        })(0);
       }
 
-      function clearWorldRoot() {
+      function clearWorld() {
         var root = document.getElementById('world-root');
-        root.object3D.traverse(function (obj) {
-          if (obj.geometry) obj.geometry.dispose();
-          if (obj.material) {
-            if (obj.material.map) obj.material.map.dispose();
-            if (obj.material.dispose) obj.material.dispose();
-          }
+        root.object3D.traverse(function (o) {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
         });
         while (root.lastChild) root.removeChild(root.lastChild);
         while (root.object3D.children.length) root.object3D.remove(root.object3D.children[0]);
       }
 
       function buildWorld() {
-        loadWallTexSamplers(function () {
-          doBuildWorld();
-        });
-      }
+        clearWorld();
+        var seed    = parseInt(document.getElementById('seed').value,  10) || 1;
+        var gridW   = parseInt(document.getElementById('gridW').value, 10) || 40;
+        var gridH   = parseInt(document.getElementById('gridH').value, 10) || 34;
+        var kMul    = parseFloat(document.getElementById('smoothK').value);
+        var domeAmp = parseFloat(document.getElementById('domeAmp').value);
+        var domeFall = parseFloat(document.getElementById('domeFall').value);
+        var step    = parseFloat(document.getElementById('voxelStep').value);
 
-      function doBuildWorld() {
-        clearWorldRoot();
-        var root = document.getElementById('world-root');
-
-        var seed = parseInt(document.getElementById('seed').value, 10) || 1;
-        var gridW = parseInt(document.getElementById('gridW').value, 10) || 40;
-        var gridH = parseInt(document.getElementById('gridH').value, 10) || 34;
-
-        var bsp = generateBspDungeon(seed, {
-          width: gridW,
-          height: gridH,
-          minLeafSize: 8,
-          maxDepth: 4
-        });
-
-        var kMul = parseFloat(document.getElementById('smoothK').value);
-        var out = SdfBspDungeon.build(root, bsp.tiles, {
-          seed: seed,
-          cellSize: CS,
+        var bsp  = generateBspDungeon(seed, { width: gridW, height: gridH, minLeafSize: 8, maxDepth: 4 });
+        var out  = buildCavern(document.getElementById('world-root'), bsp.tiles, bsp.regions, {
+          seed:       seed,
+          cellSize:   CS,
           wallHeight: WH,
-          regions: bsp.regions,
-          smoothUnion: CS * kMul,
-          smoothCap: CS * Math.min(0.28, kMul * 0.55),
-          noiseScale: 0.4,
-          octaves: 4,
-          surfaceDisplacement: parseFloat(document.getElementById('surfDisp').value),
-          uvScale: 2,
-          voxelStep: parseFloat(document.getElementById('voxelStep').value),
-          maxAxisSamples: 124,
-          ceilingMode: 'dome',
-          ceilingDomeScope: 'rooms',
-          ceilingRoomSpread: 1.4,
-          ceilingDomeAmplitude: parseFloat(document.getElementById('domeAmp').value),
-          ceilingDomeFalloff: parseFloat(document.getElementById('domeFall').value),
-          ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
-          ceilingDetailScale: 0.1,
-          albedoMode: 'luminance',
-          luminanceDarkBase: 0.056,
-          luminanceMaxBoost: 0.2,
-          luminanceHighFreqMix: 0.24,
-          wallTexSamplers: wallTexSamplers && wallTexSamplers.length ? wallTexSamplers : undefined,
-          wallTexWorldScale: 7.5,
-          wallTexMulMin: 0.26,
-          wallTexMulMax: 1,
-          wallTexBlend: 1,
-          wallTexChunkPeriod: 14,
-          grainStyle: 'none',
-          materialRoughness: 0.95,
-          materialMetalness: 0
+          smoothK:    CS * kMul,
+          voxelStep:  step,
+          domeAmp:    domeAmp,
+          domeFall:   domeFall
         });
 
-        var player = document.getElementById('player');
-        player.setAttribute('position',
+        document.getElementById('player').setAttribute('position',
           out.spawnWorld.x + ' ' + out.spawnWorld.y + ' ' + out.spawnWorld.z);
 
-        ensureHoverLight();
-        startLightMotion();
+        startTorch();
 
         requestAnimationFrame(function () {
-          refreshRaycasters(sceneEl);
-          setTimeout(function () { refreshRaycasters(sceneEl); }, 120);
+          var nodes = document.getElementById('scene').querySelectorAll('[raycaster]');
+          for (var i = 0; i < nodes.length; i++) {
+            var rc = nodes[i].components && nodes[i].components.raycaster;
+            if (rc && rc.refreshObjects) rc.refreshObjects();
+          }
           requestAnimationFrame(function () {
             requestAnimationFrame(function () {
-              relaxPointerLockOnCamera(sceneEl);
+              var cam = document.getElementById('scene').querySelector('a-camera');
+              if (cam) cam.setAttribute('look-controls', { pointerLockEnabled: false, touchEnabled: false });
             });
           });
         });
       }
 
-      document.getElementById('generateBtn').addEventListener('click', buildWorld);
-
-      sceneEl.addEventListener('loaded', function () {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            buildWorld();
-          });
-        });
+      document.getElementById('genBtn').addEventListener('click', buildWorld);
+      document.getElementById('scene').addEventListener('loaded', function () {
+        requestAnimationFrame(function () { requestAnimationFrame(buildWorld); });
       }, { once: true });
     </script>
   </body>
