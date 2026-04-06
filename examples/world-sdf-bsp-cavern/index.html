@@ -45,8 +45,8 @@
     <div id="hud">
       <h2>BSP Cavern</h2>
       <label>Seed        <input type="number" id="seed"     value="1"></label>
-      <label>Grid W      <input type="number" id="gridW"    value="40" min="16" max="72"></label>
-      <label>Grid H      <input type="number" id="gridH"    value="34" min="16" max="72"></label>
+      <label>Grid W      <input type="number" id="gridW"    value="20" min="10" max="72"></label>
+      <label>Grid H      <input type="number" id="gridH"    value="14" min="10" max="72"></label>
       <label>Dome lift   <input type="range"  id="domeAmp"  min="1.5" max="10"  step="0.1" value="6">  <span id="domeAmpV">6</span></label>
       <label>Dome fall   <input type="range"  id="domeFall" min="0.5" max="5"   step="0.05" value="2.2"><span id="domeFallV">2.2</span></label>
       <label>Smooth K    <input type="range"  id="smoothK"  min="0.15" max="2.1" step="0.02" value="0.85"><span id="smoothKV">0.85</span></label>
@@ -64,7 +64,7 @@
       loading-screen="enabled: false"
     >
       <a-assets></a-assets>
-      <a-light type="ambient" color="#020504" intensity="0.01"></a-light>
+      <a-light type="ambient" color="#000000" intensity="0.01"></a-light>
       <a-sky color="#000000"></a-sky>
       <a-entity id="world-root"></a-entity>
       <a-player id="player" locomotion grabbing position="0 0 0"></a-player>

@@ -64,13 +64,6 @@
         Uses <code>js/world/noise-dungeon.js</code> + <code>js/world/bsp-dungeon.js</code>.
       </li>
       <li>
-        <a href="world-noise-tube-dungeon/">BSP noise tube dungeon</a> — same BSP graph and the same
-        noise displacement and grain texturing as the noise dungeon, but each room is an ellipsoid
-        matched to that room’s floor rectangle and wall height, and corridors are open tubes on the
-        real <code>carveCorridor</code> paths. Uses <code>js/world/noise-capsule-dungeon.js</code> and
-        <code>js/world/bsp-dungeon.js</code>.
-      </li>
-      <li>
         <a href="world-sdf-bsp-dungeon/">BSP smin cave (marching cubes)</a> — same BSP tile layout as the
         noise dungeon, but the rock volume is a <strong>smooth-min union</strong> of wall columns plus
         ground/ceiling caps, polygonised with <strong>marching cubes</strong>, then value noise
@@ -95,6 +88,9 @@
         island falloff generates a single high-resolution smooth mesh with per-vertex terrain
         colouring (water &rarr; sand &rarr; grass &rarr; forest &rarr; hills &rarr; rock &rarr; snow) and a flat ocean plane.
         All parameters adjustable in real time. Uses <code>js/world/noise-terrain.js</code>.
+      </li>
+      <li>
+        <a href="world-noise-terrain/index-fly.html">Noise terrain 0 fly mode</a> — as above, but with a fly mode.
       </li>
     </ul>
 
