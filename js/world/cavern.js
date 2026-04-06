@@ -65,7 +65,7 @@
   // Sign convention: negative = solid rock, positive = air.
   // Walls + ground below y=0 are solid; arches lift the ceiling above wallHeight.
 
-  function makeSdf(walls, arches, WH, k) {
+  function makeSdf(walls, arches, WH, k, maxX, maxZ) {
     var kf = k * 0.28; // tighter blend at floor/wall junction
     return function sdf(px, py, pz) {
       var d = 1e9, i, a, dx, dz;
@@ -74,6 +74,13 @@
         d = smin(d, sdBox(px, py, pz, w.cx, w.cy, w.cz, w.hx, w.hy, w.hz), k);
       }
       d = smin(d, py, kf); // ground plane (solid below y = 0)
+
+      // Outer boundary: explicit half-planes so the dungeon is fully enclosed.
+      // SDF for "solid to the left of x=0" is just px (negative when px < 0).
+      d = Math.min(d, px);          // solid where x < 0
+      d = Math.min(d, maxX - px);   // solid where x > maxX
+      d = Math.min(d, pz);          // solid where z < 0
+      d = Math.min(d, maxZ - pz);   // solid where z > maxZ
 
       // Ceiling: per-room Gaussian arches, take highest point, then hard cap
       var cy = WH;
@@ -189,8 +196,14 @@
       // Recompute normal at displaced position
       var gn = gradient(sdf, px, py, pz);
 
-      // Dark rock: base grey + noise lift (max ~30% boost)
-      var c = 0.055 + n01 * 0.20;
+      // Rock strata: horizontal sine bands, warped by low-freq noise so they
+      // look geological rather than perfectly flat. Runs 0→1→0 per layer.
+      var warp   = noise.fbm(px * 0.06, pz * 0.06, 2) * 3.5;
+      var strata = 0.5 + 0.5 * Math.sin((py * 1.1 + warp) * Math.PI);
+
+      // Triplanar noise drives surface grain; strata drives layering
+      var colorN = n01 * 0.45 + strata * 0.55;
+      var c = 0.04 + colorN * 0.36; // range 0.04 (dark seam) → 0.40 (pale band)
 
       pos[i * 3]     = px;    pos[i * 3 + 1]  = py;    pos[i * 3 + 2]  = pz;
       col[i * 3]     = c;     col[i * 3 + 1]  = c;     col[i * 3 + 2]  = c;
@@ -238,7 +251,7 @@
       };
     });
 
-    var sdf = makeSdf(walls, arches, WH, k);
+    var sdf = makeSdf(walls, arches, WH, k, W * CS, H * CS);
 
     var pad  = k * 2.5;
     var soup = march(sdf, -pad, -pad * 0.5, -pad, W * CS + pad, WH + domeAmp + pad, H * CS + pad, step);
