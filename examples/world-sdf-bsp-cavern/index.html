@@ -68,9 +68,9 @@
       <button id="generateBtn">&#9654; Regenerate</button>
       <div class="hint">
         Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
-        corridors). Hard ceiling cut vs wall tops. Vertex greyscale follows the same triplanar value-noise
-        as surface displacement (noise-dungeon style; no grain map). Dim scene: ambient + directional
-        tied to view (forward fill) + handheld spot.
+        corridors). Hard ceiling cut vs wall tops. Dark albedo: value-noise ≤20% lift, then triplanar
+        photo luminance multiplies (~0.26–1×) so strata show. Serve over http(s); file:// breaks texture read.
+        Ambient + view directional + torch.
       </div>
     </div>
 
@@ -127,6 +127,49 @@
       var CS = 3;
       var WH = 3.5;
       var animStarted = false;
+      var wallTexSamplers = null;
+      var wallTexLoadDone = false;
+      var wallTexLoadStarted = false;
+      var wallTexLoadCallbacks = [];
+
+      function loadWallTexSamplers(callback) {
+        if (wallTexLoadDone) {
+          callback(wallTexSamplers);
+          return;
+        }
+        wallTexLoadCallbacks.push(callback);
+        if (wallTexLoadStarted) return;
+        wallTexLoadStarted = true;
+
+        var rel = ['textures/wall-1.png', 'textures/wall-2.png', 'textures/wall-3.png', 'textures/wall-4.png'];
+        var imgs = new Array(rel.length);
+        var left = rel.length;
+        rel.forEach(function (name, i) {
+          var im = new Image();
+          /* Omit crossOrigin for same-origin http(s); "anonymous" + missing ACAO can taint canvas and break getImageData. */
+          im.onload = function () {
+            imgs[i] = im;
+            if (--left === 0) finish();
+          };
+          im.onerror = function () {
+            imgs[i] = null;
+            if (--left === 0) finish();
+          };
+          im.src = new URL(name, document.baseURI).href;
+        });
+        function finish() {
+          wallTexSamplers = SdfBspDungeon.createWallTexSamplersFromImages(imgs.filter(Boolean));
+          wallTexLoadDone = true;
+          if (!wallTexSamplers || !wallTexSamplers.length) {
+            console.warn(
+              'world-sdf-bsp-cavern: no wall textures loaded (check paths under examples/world-sdf-bsp-cavern/textures/, use http server, not file://).'
+            );
+          }
+          var cbs = wallTexLoadCallbacks;
+          wallTexLoadCallbacks = [];
+          for (var ci = 0; ci < cbs.length; ci++) cbs[ci](wallTexSamplers);
+        }
+      }
 
       /* Spot light and target are THREE.js objects added directly to the scene graph */
       var _spotLight = null;
@@ -144,7 +187,7 @@
         fill.setAttribute('light', {
           type: 'directional',
           color: '#f0e6dc',
-          intensity: 0.62,
+          intensity: 0.32,
           castShadow: false
         });
         camEl.appendChild(fill);
@@ -208,6 +251,12 @@
       }
 
       function buildWorld() {
+        loadWallTexSamplers(function () {
+          doBuildWorld();
+        });
+      }
+
+      function doBuildWorld() {
         clearWorldRoot();
         var root = document.getElementById('world-root');
 
@@ -244,6 +293,15 @@
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
           ceilingDetailScale: 0.1,
           albedoMode: 'luminance',
+          luminanceDarkBase: 0.056,
+          luminanceMaxBoost: 0.2,
+          luminanceHighFreqMix: 0.24,
+          wallTexSamplers: wallTexSamplers && wallTexSamplers.length ? wallTexSamplers : undefined,
+          wallTexWorldScale: 7.5,
+          wallTexMulMin: 0.26,
+          wallTexMulMax: 1,
+          wallTexBlend: 1,
+          wallTexChunkPeriod: 14,
           grainStyle: 'none',
           materialRoughness: 0.95,
           materialMetalness: 0

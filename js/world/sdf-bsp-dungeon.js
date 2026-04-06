@@ -9,6 +9,7 @@
  * PUBLIC API
  * ----------
  *   SdfBspDungeon.build(rootEl, tiles, options) → { spawnWorld }
+ *   SdfBspDungeon.createWallTexSamplersFromImages(HTMLImageElement[]) → fn(u,v) luminance 0..1
  *
  * Optional (defaults match original flat ceiling + greyscale vertex tint):
  *   ceilingMode: 'flat' | 'dome' — dome raises the ceiling heightfield.
@@ -28,6 +29,11 @@
  *   base * (1 + boost * n) with n from triplanar value noise in [0,1], so highlights are at most
  *   ~20% brighter than base when boost = 0.2. Optional luminanceHighFreqMix (0–1) blends extra
  *   high-frequency fBm into n for finer wall grain (displacement unchanged).
+ *   wallTexSamplers — array of luminance samplers from SdfBspDungeon.createWallTexSamplersFromImages(imgs);
+ *   optional wallTexWorldScale (meters per UV repeat, default ~5.5),
+ *   wallTexMulMin / wallTexMulMax (default ~0.28 / 1) — after base*(1+maxBoost*nNoise), multiply albedo by
+ *   lerp(mulMin, mulMax, photo luminance) so strata read on screen (value-noise still capped by maxBoost only).
+ *   wallTexBlend (0–1, default 1) — strength of that multiply; wallTexChunkPeriod — chunk cross-fade (default 12).
  *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = low-frequency masonry grain on the map.
  *   grainNeutral: true — shorthand for grainStyle 'neutral' if grainStyle omitted.
  *   materialColor, materialRoughness, materialMetalness — PBR tweaks.
@@ -381,6 +387,121 @@
     return x < 0 ? 0 : x > 1 ? 1 : x;
   }
 
+  function fract01(x) {
+    x = x - Math.floor(x);
+    if (x < 0) x += 1;
+    return x;
+  }
+
+  /** Downscale wide photos for faster CPU sampling; bilinear luminance in repeating UV. */
+  function createBilinearLuminanceSampler(image) {
+    var canvas = document.createElement('canvas');
+    var ow = image.naturalWidth || image.width;
+    var oh = image.naturalHeight || image.height;
+    var maxDim = 480;
+    var w = ow;
+    var h = oh;
+    if (ow < 1 || oh < 1) {
+      return function () {
+        return 0.5;
+      };
+    }
+    if (w > maxDim || h > maxDim) {
+      var sc = maxDim / Math.max(w, h);
+      w = Math.max(1, Math.round(w * sc));
+      h = Math.max(1, Math.round(h * sc));
+    }
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    var data;
+    try {
+      ctx.drawImage(image, 0, 0, w, h);
+      data = ctx.getImageData(0, 0, w, h).data;
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('sdf-bsp-dungeon: wall texture canvas taint/read failed (CORS or file URL?)', e);
+      }
+      return function () {
+        return 0.5;
+      };
+    }
+    var iw = w;
+    var ih = h;
+    function L(ix, iy) {
+      ix = ((ix % iw) + iw) % iw;
+      iy = ((iy % ih) + ih) % ih;
+      var o = (iy * iw + ix) * 4;
+      return (0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2]) / 255;
+    }
+    return function sampleLum(u, v) {
+      u = fract01(u);
+      v = fract01(v);
+      var fu = u * iw - 0.5;
+      var fv = (1 - v) * ih - 0.5;
+      var x0 = Math.floor(fu);
+      var y0 = Math.floor(fv);
+      var tx = fu - x0;
+      var ty = fv - y0;
+      var l00 = L(x0, y0);
+      var l10 = L(x0 + 1, y0);
+      var l01 = L(x0, y0 + 1);
+      var l11 = L(x0 + 1, y0 + 1);
+      var l0 = l00 * (1 - tx) + l10 * tx;
+      var l1 = l01 * (1 - tx) + l11 * tx;
+      return l0 * (1 - ty) + l1 * ty;
+    };
+  }
+
+  function triplanarTexLum(px, py, pz, nx, ny, nz, texWorldScale, sampler) {
+    var inv = 1 / texWorldScale;
+    var ax = Math.abs(nx);
+    var ay = Math.abs(ny);
+    var az = Math.abs(nz);
+    var sw = ax + ay + az;
+    if (sw < 1e-10) sw = 1;
+    var wx = ax / sw;
+    var wy = ay / sw;
+    var wz = az / sw;
+    var a = sampler(py * inv, pz * inv);
+    var b = sampler(px * inv, pz * inv);
+    var c = sampler(px * inv, py * inv);
+    return a * wx + b * wy + c * wz;
+  }
+
+  function cellHash01(px, py, pz, period) {
+    var cx = Math.floor(px / period);
+    var cy = Math.floor(py / period);
+    var cz = Math.floor(pz / period);
+    var t = Math.sin(cx * 12.9898 + cy * 78.233 + cz * 43.758) * 43758.5453;
+    return fract01(t);
+  }
+
+  /** Cross-fade between consecutive textures by world chunk so repeats are less obvious. */
+  function triplanarFourTexMix(px, py, pz, nx, ny, nz, texWorldScale, samplers, chunkPeriod) {
+    var nT = samplers.length;
+    if (nT === 0) return 0.5;
+    if (nT === 1) return triplanarTexLum(px, py, pz, nx, ny, nz, texWorldScale, samplers[0]);
+    var h = cellHash01(px, py, pz, chunkPeriod) * nT;
+    var i0 = Math.floor(h) % nT;
+    if (i0 < 0) i0 += nT;
+    var i1 = (i0 + 1) % nT;
+    var f = h - Math.floor(h);
+    var v0 = triplanarTexLum(px, py, pz, nx, ny, nz, texWorldScale, samplers[i0]);
+    var v1 = triplanarTexLum(px, py, pz, nx, ny, nz, texWorldScale, samplers[i1]);
+    return v0 * (1 - f) + v1 * f;
+  }
+
+  function createWallTexSamplersFromImages(images) {
+    var out = [];
+    if (!images) return out;
+    for (var ii = 0; ii < images.length; ii++) {
+      var im = images[ii];
+      if (im && (im.naturalWidth || im.width)) out.push(createBilinearLuminanceSampler(im));
+    }
+    return out;
+  }
+
   function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul, lumDark) {
     var triCount = positions.length / 9;
     var vertCount = triCount * 3;
@@ -389,8 +510,8 @@
     var normals = new Float32Array(vertCount * 3);
     var uvs = new Float32Array(vertCount * 2);
     var eps = 0.06;
-    var ti, vi, vidx, i, base, px, py, pz, g, lum, nxv, nyv, nzv, anx, any, anz;
-    var ad, cMul;
+    var ti, vi, vidx, i, base, px, py, pz, g0, gN, lum, nxv, nyv, nzv, anx, any, anz;
+    var ad, cMul, wx, wy, wz, ln, tL, tw, n, nNoise, hfMix, hf, texMul, tMin, tMax;
 
     for (ti = 0; ti < triCount; ti++) {
       base = ti * 9;
@@ -400,8 +521,8 @@
         py = positions[base + vi * 3 + 1];
         pz = positions[base + vi * 3 + 2];
 
-        g = sdfGradient(sdf, px, py, pz, eps);
-        ad = axisNoiseDisplacement(noise, px, py, pz, g.x, g.y, g.z, nScale, nOct, floorAmp, wallAmp, ceilAmp);
+        g0 = sdfGradient(sdf, px, py, pz, eps);
+        ad = axisNoiseDisplacement(noise, px, py, pz, g0.x, g0.y, g0.z, nScale, nOct, floorAmp, wallAmp, ceilAmp);
         cMul = albedoMode === 'cobble' ? (cobbleDispMul != null ? cobbleDispMul : 1.06) : 1;
         px += ad.dx * cMul;
         py += ad.dy * cMul;
@@ -410,6 +531,8 @@
         pos[vidx * 3] = px;
         pos[vidx * 3 + 1] = py;
         pos[vidx * 3 + 2] = pz;
+
+        gN = sdfGradient(sdf, px, py, pz, eps);
 
         if (albedoMode === 'white') {
           colors[vidx * 3] = 1;
@@ -428,16 +551,43 @@
           colors[vidx * 3 + 1] = lum;
           colors[vidx * 3 + 2] = lum;
         } else if (lumDark && lumDark.base != null && lumDark.maxBoost != null) {
-          var n = ad.lumBlend;
-          var hfMix = lumDark.highFreqMix != null ? lumDark.highFreqMix : 0;
+          /* Value-noise luminance: at most maxBoost (e.g. 20%) above base — never mix photo into this term. */
+          nNoise = ad.lumBlend;
+          hfMix = lumDark.highFreqMix != null ? lumDark.highFreqMix : 0;
           if (hfMix > 0) {
-            var hf = noise.fbm(px * nScale * 2.85 + 11.3, py * nScale * 2.85 + 47.1, nOct);
-            n = n * (1 - hfMix) + hf * hfMix;
-            n = clamp01(n);
-          } else {
-            n = clamp01(n);
+            hf = noise.fbm(px * nScale * 2.85 + 11.3, py * nScale * 2.85 + 47.1, nOct);
+            nNoise = nNoise * (1 - hfMix) + hf * hfMix;
           }
-          lum = lumDark.base * (1 + lumDark.maxBoost * n);
+          nNoise = clamp01(nNoise);
+          lum = lumDark.base * (1 + lumDark.maxBoost * nNoise);
+          /* Photo strata: separate multiply so ~0.06 * (1.2) * (0.3…1) is visible, not ~0.06…0.07 only. */
+          if (lumDark.wallTexSamplers && lumDark.wallTexSamplers.length) {
+            wx = gN.x;
+            wy = gN.y;
+            wz = gN.z;
+            ln = Math.sqrt(wx * wx + wy * wy + wz * wz);
+            if (ln > 1e-10) {
+              wx /= ln;
+              wy /= ln;
+              wz /= ln;
+            }
+            tL = triplanarFourTexMix(
+              px,
+              py,
+              pz,
+              wx,
+              wy,
+              wz,
+              lumDark.wallTexWorldScale,
+              lumDark.wallTexSamplers,
+              lumDark.wallTexChunkPeriod
+            );
+            tMin = lumDark.wallTexMulMin != null ? lumDark.wallTexMulMin : 0.28;
+            tMax = lumDark.wallTexMulMax != null ? lumDark.wallTexMulMax : 1;
+            texMul = tMin + (tMax - tMin) * tL;
+            tw = lumDark.wallTexBlend != null ? lumDark.wallTexBlend : 1;
+            lum *= 1 + tw * (texMul - 1);
+          }
           colors[vidx * 3] = lum;
           colors[vidx * 3 + 1] = lum;
           colors[vidx * 3 + 2] = lum;
@@ -448,10 +598,9 @@
           colors[vidx * 3 + 2] = lum;
         }
 
-        g = sdfGradient(sdf, px, py, pz, eps);
-        normals[vidx * 3] = g.x;
-        normals[vidx * 3 + 1] = g.y;
-        normals[vidx * 3 + 2] = g.z;
+        normals[vidx * 3] = gN.x;
+        normals[vidx * 3 + 1] = gN.y;
+        normals[vidx * 3 + 2] = gN.z;
       }
     }
 
@@ -560,7 +709,13 @@
       lumDark = {
         base: options.luminanceDarkBase,
         maxBoost: options.luminanceMaxBoost,
-        highFreqMix: options.luminanceHighFreqMix
+        highFreqMix: options.luminanceHighFreqMix,
+        wallTexSamplers: options.wallTexSamplers && options.wallTexSamplers.length ? options.wallTexSamplers : null,
+        wallTexWorldScale: options.wallTexWorldScale != null ? options.wallTexWorldScale : 5.5,
+        wallTexMulMin: options.wallTexMulMin,
+        wallTexMulMax: options.wallTexMulMax,
+        wallTexBlend: options.wallTexBlend != null ? options.wallTexBlend : 1,
+        wallTexChunkPeriod: options.wallTexChunkPeriod != null ? options.wallTexChunkPeriod : 12
       };
     }
 
@@ -693,5 +848,5 @@
     return { spawnWorld: { x: spx, y: spy, z: spz } };
   }
 
-  window.SdfBspDungeon = { build: build };
+  window.SdfBspDungeon = { build: build, createWallTexSamplersFromImages: createWallTexSamplersFromImages };
 }());
