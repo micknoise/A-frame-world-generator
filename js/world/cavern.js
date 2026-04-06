@@ -199,7 +199,7 @@
     var pos = new Float32Array(n * 3);
     var col = new Float32Array(n * 3);
     var nor = new Float32Array(n * 3);
-    var sc  = 0.38, oct = 4;
+    var sc  = 0.55, oct = 5;
 
     for (var i = 0; i < n; i++) {
       var px = soup[i * 3], py = soup[i * 3 + 1], pz = soup[i * 3 + 2];
@@ -232,9 +232,9 @@
 
       // Cracked stone blocks via domain-warped Voronoi, triplanar projected.
       // Domain warp breaks up grid regularity so blocks don't tile.
-      var st = 0.55; // ~1.8 world units per stone block
-      var wu = (noise.fbm(px * 0.19 + 3.1, pz * 0.19 + 7.4, 2) - 0.5) * 2.0;
-      var wv = (noise.fbm(px * 0.19 + 11.3, pz * 0.19 + 2.8, 2) - 0.5) * 2.0;
+      var st = 0.85; // ~1.2 world units per stone block
+      var wu = (noise.fbm(px * 0.28 + 3.1, pz * 0.28 + 7.4, 3) - 0.5) * 1.5;
+      var wv = (noise.fbm(px * 0.28 + 11.3, pz * 0.28 + 2.8, 3) - 0.5) * 1.5;
 
       var cY = cellNoise((px + wu) * st, (pz + wv) * st);
       var cX = cellNoise((py + wu) * st, (pz + wv) * st);
@@ -323,10 +323,11 @@
     var spx  = (r0.x + r0.width  * 0.5) * CS;
     var spz  = (r0.y + r0.height * 0.5) * CS;
 
-    // Scan up to find the actual displaced floor surface
-    var spy = 0.05;
-    while (spy < WH && sdf(spx, spy, spz) <= 0) spy += 0.05;
-    spy += 0.4; // stand above it
+    // Scan upward from below the floor to find the first air position
+    var spy = -0.3;
+    while (spy < WH && sdf(spx, spy, spz) <= 0) spy += 0.04;
+    if (spy >= WH) spy = 1.5; // fallback if scan fails
+    spy += 0.7; // generous clearance above surface
 
     return { spawnWorld: { x: spx, y: spy, z: spz } };
   }

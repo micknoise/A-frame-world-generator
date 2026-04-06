@@ -151,8 +151,17 @@
           domeFall:   domeFall
         });
 
-        document.getElementById('player').setAttribute('position',
+        var player = document.getElementById('player');
+        player.setAttribute('position',
           out.spawnWorld.x + ' ' + out.spawnWorld.y + ' ' + out.spawnWorld.z);
+        // Zero out cannon.js velocity so old momentum doesn't carry over
+        var body = player.components['dynamic-body'] && player.components['dynamic-body'].body;
+        if (body) {
+          body.velocity.set(0, 0, 0);
+          body.angularVelocity.set(0, 0, 0);
+          body.position.set(out.spawnWorld.x, out.spawnWorld.y, out.spawnWorld.z);
+          body.wakeUp();
+        }
 
         startTorch();
 
