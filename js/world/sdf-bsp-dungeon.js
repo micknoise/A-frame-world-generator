@@ -1,7 +1,8 @@
 /**
  * sdf-bsp-dungeon.js — BSP tile grid → smooth solid (smin union of wall columns +
  * ground/ceiling half-spaces) → marching cubes mesh → value-noise displacement
- * and luminance vertex colours (same idea as noise-dungeon / noise-terrain shading).
+ * and luminance vertex colours: in luminance mode, triplanar blend of the same raw fBm samples
+ * used for displacement (like noise-dungeon merged quads’ dispValues / noise-capsule shadeNoise).
  *
  * Does not modify noise-dungeon.js or the world-noise-dungeon example.
  *
@@ -351,21 +352,25 @@
       ty /= sum;
       tz /= sum;
     }
-    var hFloor = (noise.fbm(px * nScale + 0, pz * nScale + 0, nOct) - 0.5) * 2 * floorAmp;
-    var hCeil = (noise.fbm(px * nScale + 100, pz * nScale + 100, nOct) - 0.5) * 2 * ceilAmp;
+    var nf = noise.fbm(px * nScale + 0, pz * nScale + 0, nOct);
+    var nc = noise.fbm(px * nScale + 100, pz * nScale + 100, nOct);
+    var hFloor = (nf - 0.5) * 2 * floorAmp;
+    var hCeil = (nc - 0.5) * 2 * ceilAmp;
     var offX = gx >= 0 ? 400 : 500;
-    var hWallX = (noise.fbm(py * nScale + offX, pz * nScale + offX * 1.3, nOct) - 0.5) * 2 * wallAmp;
+    var nWallX = noise.fbm(py * nScale + offX, pz * nScale + offX * 1.3, nOct);
+    var hWallX = (nWallX - 0.5) * 2 * wallAmp;
     var offZ = gz >= 0 ? 200 : 300;
-    var hWallZ = (noise.fbm(px * nScale + offZ, py * nScale + offZ * 1.3, nOct) - 0.5) * 2 * wallAmp;
+    var nWallZ = noise.fbm(px * nScale + offZ, py * nScale + offZ * 1.3, nOct);
+    var hWallZ = (nWallZ - 0.5) * 2 * wallAmp;
     var dy = 0;
     if (gy > 0) dy += ty * hFloor;
     if (gy < 0) dy -= ty * hCeil;
     var dx = tx * hWallX * (Math.abs(gx) < 1e-7 ? 0 : gx >= 0 ? 1 : -1);
     var dz = tz * hWallZ * (Math.abs(gz) < 1e-7 ? 0 : gz >= 0 ? 1 : -1);
-    var lumBlend =
-      noise.fbm(px * nScale + 17, pz * nScale + 23, nOct) * 0.52 +
-      noise.fbm(py * nScale * 1.1 + 41, px * nScale + 11, nOct) * 0.48;
-    return { dx: dx, dy: dy, dz: dz, lumBlend: lumBlend };
+    /* Same triplanar luminance as noise-capsule / noise-dungeon-style axis blend of displacement fBms. */
+    var shadeNoise = ty * (gy > 0 ? nf : nc) + tx * nWallX + tz * nWallZ;
+    shadeNoise /= Math.max(1e-6, ty + tx + tz);
+    return { dx: dx, dy: dy, dz: dz, lumBlend: shadeNoise };
   }
 
   function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul) {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BSP smin cavern — domed ceiling & cobble</title>
+    <title>BSP smin cavern — dome + noise-dungeon luminance</title>
     <link rel="icon" href="data:," />
     <script>
       window.AFRAME_CDN_ROOT = new URL('../../libs/aframe-cdn/', document.baseURI).href;
@@ -54,7 +54,7 @@
   <body>
     <div id="hud">
       <p class="ref">Flat ceiling variant: <a href="../world-sdf-bsp-dungeon/">world-sdf-bsp-dungeon</a></p>
-      <h2>Cavern dome + cobblestone</h2>
+      <h2>Cavern dome + displacement luminance</h2>
       <label>Seed <input type="number" id="seed" value="1"></label>
       <label>Grid W <input type="number" id="gridW" value="40" min="16" max="72"></label>
       <label>Grid H <input type="number" id="gridH" value="34" min="16" max="72"></label>
@@ -68,7 +68,8 @@
       <button id="generateBtn">&#9654; Regenerate</button>
       <div class="hint">
         Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
-        corridors). Hard ceiling cut vs wall tops. Cobble shading and grain; dim scene, lamp above you.
+        corridors). Hard ceiling cut vs wall tops. Vertex greyscale follows the same triplanar value-noise
+        as surface displacement (noise-dungeon style; no grain map). Dim scene, lamp above you.
       </div>
     </div>
 

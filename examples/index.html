@@ -67,8 +67,8 @@
         <a href="world-noise-tube-dungeon/">BSP noise tube dungeon</a> — same BSP graph and the same
         noise displacement and grain texturing as the noise dungeon, but each room is an ellipsoid
         matched to that room’s floor rectangle and wall height, and corridors are open tubes on the
-        real <code>carveCorridor</code> paths. Uses <code>js/world/noise-capsule-dungeon.js</code>
-        (<code>NoiseTubeDungeon.build</code>) + <code>js/world/bsp-dungeon.js</code>.
+        real <code>carveCorridor</code> paths. Uses <code>js/world/noise-capsule-dungeon.js</code> and
+        <code>js/world/bsp-dungeon.js</code>.
       </li>
       <li>
         <a href="world-sdf-bsp-dungeon/">BSP smin cave (marching cubes)</a> — same BSP tile layout as the
@@ -79,11 +79,11 @@
         <code>js/world/bsp-dungeon.js</code>.
       </li>
       <li>
-        <a href="world-sdf-bsp-cavern/">BSP smin cavern (dome + cobble + hover light)</a> — same marching-cubes
-        pipeline with a         <strong>per-room vaulted ceiling</strong> (BSP room rects + ceiling noise; hard
-        ceiling cut so the roof isn’t flattened by wall tops), <strong>cobblestone</strong> grain and
-        vertex tones, <strong>noise-dungeon-style</strong> axis fBm displacement (floor / wall / ceiling
-        sampling), and a <strong>dark scene</strong> with a dim point lamp moving above the player. Uses options on
+        <a href="world-sdf-bsp-cavern/">BSP smin cavern (dome + displacement luminance + hover light)</a> — same
+        marching-cubes pipeline with a <strong>per-room vaulted ceiling</strong> (BSP room rects + ceiling noise;
+        hard ceiling cut so the roof isn’t flattened by wall tops), <strong>vertex greyscale</strong> from the
+        same triplanar value-noise as the surface bump (like the noise dungeon’s greyscale, no separate grain
+        texture), and a <strong>dark scene</strong> with a dim lamp above the player. Options are passed to
         <code>js/world/sdf-bsp-dungeon.js</code>.
       </li>
     </ul>
