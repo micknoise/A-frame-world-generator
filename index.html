@@ -1,176 +1,102 @@
 <!DOCTYPE html>
-<!--
-  ROOT PROCEDURAL DEMO — learner / maintainer map
-  ================================================
-  This is the main entry: A-Frame 1.3 + a-game + BSP/ridge hybrid world in #world-root.
-
-  Serve the REPOSITORY ROOT over HTTP (e.g. python3 -m http.server). Do not use file:// — relative
-  paths to libs/ and the Cannon worker will break.
-
-  DATA FLOW (high level)
-  ----------------------
-  1) Scripts load in a fixed order (see <head> comments): CDN rewrite → A-Frame → strip grabbable →
-     a-game → bsp / ridge / combine / grid-build → generator (defines window.generateWorld).
-  2) After <a-scene> fires "loaded", the inline boot script calls generateWorld(world-root, seed).
-  3) generateWorld (js/world/generator.js) runs BSP + ridge carve and buildAgameTileWorld, which
-     appends <a-box> entities with floor / wall / start and physics props under #world-root.
-  4) The player entity is moved to spawnWorld from the return value so you start inside the dungeon.
-
-  URL INTERFACE
-  -------------
-  ?seed=42 — integer seed for the whole procedural chain (BSP RNG + ridge phase + crate scatter).
-  Omit ?seed — defaults to 1.
-
-  GITHUB PAGES (project site URL …/REPO_NAME/)
-  --------------------------------------------
-  If relative asset URLs ever mis-resolve (rare when every link is document-relative), uncomment
-  <base href="/A-frame-world-generator/" /> in <head> and match your repo name. See README.md.
--->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Procedural A-Frame world</title>
-    <!-- Avoids a useless /favicon.ico request; safe to remove. -->
+    <title>World-gen examples</title>
     <link rel="icon" href="data:," />
-    <!--
-      Optional for GitHub Pages project sites only, if you see 404s on libs/ or the worker:
-      <base href="/A-frame-world-generator/" />
-    -->
-
-    <!--
-      Offline / local VR: A-Frame requests cdn.aframe.io assets; aframe-cdn-rewrite.js + this root
-      redirect those fetches to libs/aframe-cdn/. Must run BEFORE aframe-v1.3.0.min.js.
-    -->
-    <script>
-      window.AFRAME_CDN_ROOT = new URL('libs/aframe-cdn/', document.baseURI).href;
-    </script>
-    <script src="js/aframe-cdn-rewrite.js"></script>
-    <script src="libs/aframe/aframe-v1.3.0.min.js"></script>
-    <!--
-      a-game registers its own grabbable; A-Frame 1.3’s stock component conflicts — delete before a-game.
-    -->
-    <script>
-      if (window.AFRAME && AFRAME.components && AFRAME.components.grabbable) {
-        delete AFRAME.components.grabbable;
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 44rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.45;
       }
-    </script>
-    <script src="libs/a-game/a-game.min.js"></script>
-    <!--
-      World pipeline (order matters — generator.js expects these globals):
-      bsp-dungeon.js     → generateBspDungeon
-      ridge-field.js     → WorldGenRidge.sampleRidgeGrid, ridgedFbm, …
-      combine-bsp-ridge.js → WorldGenCombine.carveFromBsp, …
-      grid-build.js      → buildAgameTileWorld
-      generator.js       → window.generateWorld(root, seed)
-    -->
-    <script src="js/world/bsp-dungeon.js"></script>
-    <script src="js/world/ridge-field.js"></script>
-    <script src="js/world/combine-bsp-ridge.js"></script>
-    <!-- ?v= bumps cache after deploy (GitHub Pages + browsers cache JS aggressively). -->
-    <script src="js/world/grid-build.js?v=tierA-pbr-6"></script>
-    <script src="js/world/generator.js"></script>
+      a {
+        color: #1565c0;
+      }
+      ul {
+        padding-left: 1.2rem;
+      }
+      code {
+        font-size: 0.95em;
+      }
+      h2 {
+        margin-top: 2rem;
+        border-top: 1px solid #ddd;
+        padding-top: 1rem;
+      }
+    </style>
   </head>
   <body>
-    <!-- Desktop link to other combination modes (union, rooms-in-ridge). Fixed above the canvas. -->
-    <a
-      href="examples/"
-      style="position: fixed; top: 8px; left: 8px; z-index: 10; font: 13px system-ui, sans-serif; padding: 6px 10px; background: rgba(0, 0, 0, 0.55); color: #fff; border-radius: 6px; text-decoration: none"
-      >BSP + ridge examples</a
-    >
-    <!-- a-game hook for optional VR position save; unchecked = no-op. Safe to remove for minimal demos. -->
-    <input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true" />
+    <h1>Procedural world examples</h1>
+    <p>
+      These scenes use algorithms ported from
+      <a href="https://github.com/micknoise/world-gen">github.com/micknoise/world-gen</a>
+      (BSP dungeon + ridge dungeon), combined for a-game / A-Frame 1.3 with vendored libs. Serve the
+      <strong>repository root</strong> over HTTP and open paths below (not <code>file://</code>).
+    </p>
 
-    <!--
-      physics workerUrl: must be same-origin (this repo’s cannonWorker.min.js). Wrong path → no physics.
-      loading-screen: optional UX tweak (default overlay off).
-    -->
-    <a-scene
-      id="scene"
-      physics="workerUrl: libs/a-game/cannonWorker.min.js?v=hull-guard-1; gravity: 0 -10 0"
-      loading-screen="enabled: false"
-    >
-      <a-assets></a-assets>
-      <a-light type="ambient" color="#000000" intensity="0.05"></a-light>
-      <a-light type="directional" color="#fff5e6" intensity="0.15" position="2 6 4"></a-light>
-      <a-sky color="#b9e8ff"></a-sky>
-      <!-- All procedural entities are appended here by buildAgameTileWorld. -->
-      <a-entity id="world-root"></a-entity>
-      <!-- position below is overwritten after generateWorld returns spawnWorld (see boot script). -->
-      <a-player id="player" locomotion grabbing position="0 0 2"></a-player>
-    </a-scene>
+    <h2>Indoor / dungeon generators</h2>
+    <ul>
+      <li>
+        <a href="examples/world-maze/">Perfect maze</a> — recursive backtracker, BFS-farthest <strong>goal</strong>
+        pillar, Tier&nbsp;A ceiling / trims / materials (see <code>js/world/maze.js</code>).
+      </li>
+      <li>
+        <a href="examples/world-bsp-ridge-carve/">BSP + ridge carve</a> — organic pockets grow from the BSP
+        dungeon only where ridge noise agrees and touches existing floor.
+      </li>
+      <li>
+        <a href="examples/world-bsp-ridge-union/">BSP + ridge union</a> — walkable if either BSP or ridge says
+        open; then flood-filled from the BSP spawn so you stay in one connected region.
+      </li>
+      <li>
+        <a href="examples/world-bsp-ridge-rooms/">Ridge cavern + BSP rooms</a> — ridge forms the cave; BSP room
+        rectangles are forced open as anchor chambers.
+      </li>
+      <li>
+        <a href="examples/world-noise-dungeon/">BSP noise dungeon</a> — BSP generates the room/corridor layout;
+        value noise displaces floor, wall, and ceiling meshes to create organic cave-like surfaces.
+        Floors stay gently lumpy (navigable), walls bulge and recede like natural rock, ceilings sag
+        with stalactite-like variation. All displacement amplitudes adjustable in real time.
+        Uses <code>js/world/noise-dungeon.js</code> + <code>js/world/bsp-dungeon.js</code>.
+      </li>
+      <li>
+        <a href="examples/world-sdf-bsp-dungeon/">BSP smin cave (marching cubes)</a> — same BSP tile layout as the
+        noise dungeon, but the rock volume is a <strong>smooth-min union</strong> of wall columns plus
+        ground/ceiling caps, polygonised with <strong>marching cubes</strong>, then value noise
+        displacement along the SDF gradient (organic surface without box seams or displacement holes).
+        Uses <code>js/world/sdf-bsp-dungeon.js</code>, <code>js/world/mc-tables.js</code>, and
+        <code>js/world/bsp-dungeon.js</code>.
+      </li>
+      <li>
+        <a href="examples/world-sdf-bsp-cavern/">BSP smin cavern (dome + displacement luminance + hover light)</a> — same
+        marching-cubes pipeline with a <strong>per-room vaulted ceiling</strong> (BSP room rects + ceiling noise;
+        hard ceiling cut so the roof isn’t flattened by wall tops), <strong>vertex greyscale</strong> from the
+        same triplanar value-noise as the surface bump (like the noise dungeon’s greyscale, no separate grain
+        texture), and a <strong>dark scene</strong> with a dim lamp above the player. Options are passed to
+        <code>js/world/sdf-bsp-dungeon.js</code>.
+      </li>
+    </ul>
 
-    <script>
-      /*
-        Console noise: pointer lock / WrongDocumentError rejections in iframes or unfocused tabs.
-        Not required for worldgen; safe to remove if you prefer seeing every rejection.
-      */
-      window.addEventListener('unhandledrejection', function (event) {
-        var name = event.reason && event.reason.name;
-        var msg = String((event.reason && event.reason.message) || event.reason || '');
-        if (name === 'WrongDocumentError' || msg.indexOf('Pointer lock') !== -1) {
-          event.preventDefault();
-        }
-      });
+    <h2>Outdoor / landscape generators</h2>
+    <ul>
+      <li>
+        <a href="examples/world-noise-terrain/">Noise terrain</a> — layered value noise (fBm) with radial
+        island falloff generates a single high-resolution smooth mesh with per-vertex terrain
+        colouring (water &rarr; sand &rarr; grass &rarr; forest &rarr; hills &rarr; rock &rarr; snow) and a flat ocean plane.
+        All parameters adjustable in real time. Uses <code>js/world/noise-terrain.js</code>.
+      </li>
+      <li>
+        <a href="examples/world-noise-terrain/index-fly.html">Noise terrain 0 fly mode</a> — as above, but with a fly mode.
+      </li>
+    </ul>
 
-      /*
-        Dynamic DOM under #world-root does not automatically refresh a-game raycasters; call after spawn.
-      */
-      function refreshRaycasters(rootScene) {
-        var nodes = rootScene.querySelectorAll('[raycaster]');
-        for (var i = 0; i < nodes.length; i++) {
-          var rc = nodes[i].components && nodes[i].components.raycaster;
-          if (rc && typeof rc.refreshObjects === 'function') rc.refreshObjects();
-        }
-      }
-
-      /* Desktop-friendly: no pointer lock on mouse look (embedded pages / strict environments). */
-      function relaxPointerLockOnCamera(rootScene) {
-        var cam = rootScene.querySelector('a-camera');
-        if (!cam) return;
-        cam.setAttribute('look-controls', {
-          pointerLockEnabled: false,
-          touchEnabled: false
-        });
-      }
-
-      var scene = document.getElementById('scene');
-      var seed = 1;
-      var q = new URLSearchParams(location.search).get('seed');
-      if (q != null) seed = parseInt(q, 10) || 1;
-
-      /*
-        Double rAF: wait until after A-Frame’s internal tick so components on <a-scene> are ready
-        before we inject a large subtree. Then refresh raycasters twice (immediate + delayed) because
-        physics bodies may register slightly later.
-      */
-      scene.addEventListener(
-        'loaded',
-        function () {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              var root = document.getElementById('world-root');
-              var meta = window.generateWorld(root, seed);
-              if (meta && meta.spawnWorld) {
-                var sw = meta.spawnWorld;
-                document.getElementById('player').setAttribute('position', sw.x + ' 0 ' + sw.z);
-              }
-              requestAnimationFrame(function () {
-                refreshRaycasters(scene);
-                setTimeout(function () {
-                  refreshRaycasters(scene);
-                }, 120);
-                requestAnimationFrame(function () {
-                  requestAnimationFrame(function () {
-                    relaxPointerLockOnCamera(scene);
-                  });
-                });
-              });
-            });
-          });
-        },
-        { once: true }
-      );
-    </script>
+    <p>
+      Append <code>?seed=123</code> to any example URL to fix a layout. Legacy BSP + ridge arena (crates):
+      <a href="arena.html"><code>arena.html</code></a>.
+    </p>
   </body>
 </html>

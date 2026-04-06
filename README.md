@@ -15,9 +15,9 @@ python3 -m http.server 8080
 
 | URL | What |
 |-----|------|
-| [http://localhost:8080/](http://localhost:8080/) | Main procedural dungeon (`index.html`) |
-| [http://localhost:8080/?seed=42](http://localhost:8080/?seed=42) | Same with fixed seed |
-| [http://localhost:8080/examples/](http://localhost:8080/examples/) | Maze, BSP + ridge combinations |
+| [http://localhost:8080/](http://localhost:8080/) | Example index (`index.html` — links to all demos) |
+| [http://localhost:8080/arena.html](http://localhost:8080/arena.html) | BSP + ridge carve arena + crates (`?seed=42` supported) |
+| [http://localhost:8080/examples/](http://localhost:8080/examples/) | Same example list (paths relative to `examples/`) |
 | [http://localhost:8080/glb-room/](http://localhost:8080/glb-room/) | GLB room demo (shared `libs/`) |
 
 **Do not open `index.html` via `file://`.** Relative URLs and the Cannon worker must be same-origin HTTP.
@@ -61,7 +61,7 @@ seed
 
 **Alternate source:** [`generateMaze(seed, opts)`](js/world/maze.js) — perfect maze (recursive backtracker), `markers` with `start` and `goal` where **goal** is the **BFS-farthest** floor tile from start. Feed the same `tiles` into `buildAgameTileWorld` with `goalTile` set from that marker. Example: [`examples/world-maze/`](examples/world-maze/).
 
-The **root** [`index.html`](index.html) uses **carve** (BSP + `carveFromBsp`). **[`examples/`](examples/)** pages document **maze**, **union**, and **rooms-in-ridge** with inline comments.
+**[`arena.html`](arena.html)** uses **carve** (BSP + `carveFromBsp`). The site **home** [`index.html`](index.html) lists every example. **[`examples/`](examples/)** mirrors that list with document-relative links.
 
 ### Visual detail (Tier A vs basic)
 
@@ -89,7 +89,7 @@ Pass **`visualDetail: 'basic'`** to keep the older flat colors only (still merge
 
 ### Script load order (critical)
 
-[`index.html`](index.html) loads scripts in this order:
+[`arena.html`](arena.html) loads scripts in this order:
 
 1. `AFRAME_CDN_ROOT` inline + `js/aframe-cdn-rewrite.js` — local mirror for `cdn.aframe.io` (offline VR assets).
 2. `libs/aframe/aframe-v1.3.0.min.js`
@@ -109,7 +109,7 @@ If you reorder or omit files, `generateWorld` will log an error and fall back to
 
 ### 1. URL / page-level (no code changes)
 
-- **`?seed=N`** on the root page — integer seed for the full chain (BSP, ridge, crate scatter). Default `1` if missing or invalid.
+- **`?seed=N`** on **`arena.html`** — integer seed for the full chain (BSP, ridge, crate scatter). Default `1` if missing or invalid.
 
 ### 2. `window.generateWorld(rootEl, seed)` — main entry
 
@@ -119,7 +119,7 @@ Defined in [`js/world/generator.js`](js/world/generator.js).
 - **Returns:** `{ spawnWorld, gridW, gridH, markerTile, goalTile? }` from `buildAgameTileWorld` (goal only if you passed `goalTile` and it was valid). Use `spawnWorld` to place `<a-player>` after generation.
 - **Side effects:** Appends many elements under `rootEl`. Clear `rootEl` first if regenerating.
 
-**Regenerating at runtime:** remove children from `#world-root`, call `generateWorld` again with a new seed, move the player, then refresh a-game raycasters (see [`index.html`](index.html) `refreshRaycasters`).
+**Regenerating at runtime:** remove children from `#world-root`, call `generateWorld` again with a new seed, move the player, then refresh a-game raycasters (see [`arena.html`](arena.html) `refreshRaycasters`).
 
 ### 3. Lower-level building blocks
 
@@ -141,7 +141,7 @@ Use these when you write a custom page (like [`examples/world-bsp-ridge-union/in
 
 **`buildAgameTileWorld` options:** `cellSize`, `wallHeight`, `floorThickness`, `ceilingThickness`, `trimHeight`, `trimDepth`, `markerTile`, `goalTile`, `seed`, `includeToys`, `crateCount`, `visualDetail` (`'tierA'` | `'basic'`), `displacement`, `displacementScaleFloor`, `displacementScaleWall`, `displacementScaleCeiling`.
 
-### 4. Customising the root demo
+### 4. Customising the arena demo
 
 Edit [`js/world/generator.js`](js/world/generator.js):
 
@@ -154,7 +154,7 @@ Do not change the **tile string values** (`'floor'`, `'wall'`) without updating 
 
 ---
 
-## Scene integration (root `index.html`)
+## Scene integration (`arena.html`)
 
 After `<a-scene>` emits `loaded`, the boot script:
 
@@ -164,7 +164,7 @@ After `<a-scene>` emits `loaded`, the boot script:
 4. Calls `refreshRaycasters` (twice, with a short delay) so a-game picks up new meshes.
 5. Disables pointer lock on desktop for friendlier embedded use.
 
-`index.html` and each `js/world/*.js` file contain **inline comments** explaining edge cases (physics worker URL, double `requestAnimationFrame`, etc.).
+`arena.html` and each `js/world/*.js` file contain **inline comments** explaining edge cases (physics worker URL, double `requestAnimationFrame`, etc.).
 
 ---
 

@@ -1,8 +1,8 @@
 # Where everything lives (all local, committed in this repo)
 
-The app does **not** load scripts or assets from the public internet. After `git clone`, serve the repo root over HTTP and open `index.html` — **no npm install, no vendor script, no CDN.**
+The app does **not** load scripts or assets from the public internet. After `git clone`, serve the repo root over HTTP and open `index.html` (example list) or `arena.html` (BSP + ridge demo) — **no npm install, no vendor script, no CDN.**
 
-## What `index.html` loads
+## What `arena.html` loads
 
 | File | Purpose |
 |------|---------|
@@ -23,7 +23,7 @@ The app does **not** load scripts or assets from the public internet. After `git
 - **`libs/aframe-cdn/`** — Full mirror of everything A-Frame 1.3 can request from `cdn.aframe.io` (controllers, fonts, glTF sidecars). Microsoft controllers are mirrored from WebXR Input Profiles into `controllers/microsoft/` (see `scripts/vendor-libs.mjs`).  
   *This tree may also contain extra controller files from older vendor runs; that is harmless.*
 - **`libs/aframe-inspector/`** — A-Frame Inspector (used when the inspector is opened; the bundle in `libs/aframe/` is patched to load this path instead of unpkg).
-- **`libs/draco/`** — Draco decoder (optional; not referenced by the default `index.html`; keep if you add `gltf-model` + Draco later).
+- **`libs/draco/`** — Draco decoder (optional; not referenced by the default `arena.html`; keep if you add `gltf-model` + Draco later).
 
 ## Maintainer note
 
