@@ -24,6 +24,10 @@
  *   buildDisplacedQuad, blended by squared SDF gradient (triplanar weights), not a single normal push.
  *
  *   albedoMode: 'luminance' | 'white' | 'cobble' — cobble = large-patch vertex tones (grey stone).
+ *   luminanceDarkBase (0–1) + luminanceMaxBoost (e.g. 0.2) — in luminance mode, vertex grey is
+ *   base * (1 + boost * n) with n from triplanar value noise in [0,1], so highlights are at most
+ *   ~20% brighter than base when boost = 0.2. Optional luminanceHighFreqMix (0–1) blends extra
+ *   high-frequency fBm into n for finer wall grain (displacement unchanged).
  *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = low-frequency masonry grain on the map.
  *   grainNeutral: true — shorthand for grainStyle 'neutral' if grainStyle omitted.
  *   materialColor, materialRoughness, materialMetalness — PBR tweaks.
@@ -373,7 +377,11 @@
     return { dx: dx, dy: dy, dz: dz, lumBlend: shadeNoise };
   }
 
-  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul) {
+  function clamp01(x) {
+    return x < 0 ? 0 : x > 1 ? 1 : x;
+  }
+
+  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul, lumDark) {
     var triCount = positions.length / 9;
     var vertCount = triCount * 3;
     var pos = new Float32Array(vertCount * 3);
@@ -416,6 +424,20 @@
           lum = 0.3 + stone * 0.52;
           if (lum < 0.28) lum = 0.28;
           if (lum > 0.88) lum = 0.88;
+          colors[vidx * 3] = lum;
+          colors[vidx * 3 + 1] = lum;
+          colors[vidx * 3 + 2] = lum;
+        } else if (lumDark && lumDark.base != null && lumDark.maxBoost != null) {
+          var n = ad.lumBlend;
+          var hfMix = lumDark.highFreqMix != null ? lumDark.highFreqMix : 0;
+          if (hfMix > 0) {
+            var hf = noise.fbm(px * nScale * 2.85 + 11.3, py * nScale * 2.85 + 47.1, nOct);
+            n = n * (1 - hfMix) + hf * hfMix;
+            n = clamp01(n);
+          } else {
+            n = clamp01(n);
+          }
+          lum = lumDark.base * (1 + lumDark.maxBoost * n);
           colors[vidx * 3] = lum;
           colors[vidx * 3 + 1] = lum;
           colors[vidx * 3 + 2] = lum;
@@ -529,6 +551,18 @@
     var matRough = options.materialRoughness != null ? options.materialRoughness : 0.88;
     var matMetal = options.materialMetalness != null ? options.materialMetalness : 0.03;
     var cobbleDispMul = options.cobbleDisplacementMul != null ? options.cobbleDisplacementMul : 1;
+    var lumDark = null;
+    if (
+      options.luminanceDarkBase != null &&
+      options.luminanceMaxBoost != null &&
+      albedoMode === 'luminance'
+    ) {
+      lumDark = {
+        base: options.luminanceDarkBase,
+        maxBoost: options.luminanceMaxBoost,
+        highFreqMix: options.luminanceHighFreqMix
+      };
+    }
 
     var H = tiles.length;
     var W = tiles[0].length;
@@ -601,7 +635,7 @@
     if (soup.length < 9) {
       geo = new THREE.BoxGeometry(CS * 2, 0.2, CS * 2);
     } else {
-      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul);
+      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul, lumDark);
     }
 
     var matOpts = {
