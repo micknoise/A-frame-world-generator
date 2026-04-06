@@ -68,8 +68,8 @@
       <button id="generateBtn">&#9654; Regenerate</button>
       <div class="hint">
         Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
-        corridors). Hard ceiling cut vs wall tops. Vertex greyscale follows the same triplanar value-noise
-        as surface displacement (noise-dungeon style; no grain map). Dim scene, lamp above you.
+        corridors). Hard ceiling cut vs wall tops.         Dark rock look: high-contrast vertex shading from the same noise as bumps, warm brown tint,
+        multi-scale procedural grain (not a photo tile). Softer torch; dim scene.
       </div>
     </div>
 
@@ -83,8 +83,8 @@
       loading-screen="enabled: false"
     >
       <a-assets></a-assets>
-      <a-light type="ambient" color="#060504" intensity="0.03"></a-light>
-      <a-sky color="#020208"></a-sky>
+      <a-light type="ambient" color="#040308" intensity="0.012"></a-light>
+      <a-sky color="#010104"></a-sky>
 
       <a-entity id="world-root"></a-entity>
       <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
@@ -137,7 +137,7 @@
         if (_spotLight) return;
         var THREE = AFRAME.THREE;
         var sceneObj = document.getElementById('scene').object3D;
-        _spotLight = new THREE.SpotLight(0xc4601a, 0.75, 24, Math.PI * 0.38, 0.55, 2);
+        _spotLight = new THREE.SpotLight(0xb85a18, 0.26, 20, Math.PI * 0.34, 0.62, 2.2);
         _spotTarget = new THREE.Object3D();
         sceneObj.add(_spotLight);
         sceneObj.add(_spotTarget);
@@ -163,13 +163,13 @@
             _spotTarget.position.copy(_spotLight.position).addScaledVector(_spotDir, 10);
             _spotTarget.updateMatrixWorld();
           }
-          /* Torch flicker */
+          /* Subtle flicker — keep peak low so walls stay mostly shadow (torch-in-cavern). */
           var flicker =
-            Math.sin(t * 7.3)  * 0.10 +
-            Math.sin(t * 13.7) * 0.06 +
-            Math.sin(t * 23.1) * 0.04 +
+            Math.sin(t * 7.3)  * 0.06 +
+            Math.sin(t * 13.7) * 0.04 +
+            Math.sin(t * 23.1) * 0.03 +
             Math.sin(t * 47.3) * 0.02;
-          _spotLight.intensity = Math.max(0.2, 0.75 * (1 + flicker));
+          _spotLight.intensity = Math.max(0.06, 0.26 * (1 + flicker * 0.35));
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
@@ -225,8 +225,13 @@
           ceilingDetailAmplitude: parseFloat(document.getElementById('ceilDet').value),
           ceilingDetailScale: 0.1,
           albedoMode: 'luminance',
-          grainStyle: 'none',
-          materialRoughness: 0.95,
+          grainStyle: 'rock',
+          vertexLuminanceContrast: 1.52,
+          vertexLuminanceMin: 0.05,
+          vertexLuminanceMax: 0.48,
+          vertexRockTint: true,
+          materialColor: '#1e1814',
+          materialRoughness: 0.98,
           materialMetalness: 0
         });
 
