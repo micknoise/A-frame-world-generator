@@ -24,9 +24,7 @@
  *   buildDisplacedQuad, blended by squared SDF gradient (triplanar weights), not a single normal push.
  *
  *   albedoMode: 'luminance' | 'white' | 'cobble' — cobble = large-patch vertex tones (grey stone).
- *   grainStyle: 'default' | 'neutral' | 'cobble' | 'rock' | 'none' — rock = dark multi-scale grain for cavern walls.
- *   vertexLuminanceContrast / vertexLuminanceMin / vertexLuminanceMax — remaps triplanar luminance (chiaroscuro).
- *   vertexRockTint — if true, luminance drives warm brown-grey RGB instead of neutral grey.
+ *   grainStyle: 'default' | 'neutral' | 'cobble' — cobble = low-frequency masonry grain on the map.
  *   grainNeutral: true — shorthand for grainStyle 'neutral' if grainStyle omitted.
  *   materialColor, materialRoughness, materialMetalness — PBR tweaks.
  *
@@ -131,14 +129,6 @@
           mix = g0 * 0.5 + g1 * 0.35 + g2 * 0.15;
           grey = Math.floor(55 + mix * 125);
           grey = Math.max(42, Math.min(205, grey));
-        } else if (style === 'rock') {
-          /* Dark matte micro-variation (multi-scale); triplanar world UVs avoid obvious tiling. */
-          g0 = grainNoise.fbm(u * 4.5 + 0.9, v * 4.5 + 2.1, 4);
-          g1 = grainNoise.fbm(u * 17 + 2.4, v * 17 + 0.6, 3);
-          g2 = grainNoise.fbm(u * 38 + 5.1, v * 38 + 3.3, 2);
-          mix = g0 * 0.48 + g1 * 0.35 + g2 * 0.17;
-          grey = Math.floor(32 + mix * 78);
-          grey = Math.max(24, Math.min(118, grey));
         } else if (style === 'neutral') {
           g0 = grainNoise.fbm(u * 24, v * 24, 3);
           grey = Math.floor(248 + g0 * 7);
@@ -383,12 +373,7 @@
     return { dx: dx, dy: dy, dz: dz, lumBlend: shadeNoise };
   }
 
-  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul, lumRemap) {
-    lumRemap = lumRemap || {};
-    var lumContrast = lumRemap.contrast != null ? lumRemap.contrast : 1;
-    var lumMin = lumRemap.min;
-    var lumMax = lumRemap.max;
-    var rockTint = !!lumRemap.rockTint;
+  function buildGeometryFromSoup(positions, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul) {
     var triCount = positions.length / 9;
     var vertCount = triCount * 3;
     var pos = new Float32Array(vertCount * 3);
@@ -436,23 +421,9 @@
           colors[vidx * 3 + 2] = lum;
         } else {
           lum = ad.lumBlend;
-          if (lumContrast !== 1) {
-            lum = Math.pow(Math.max(1e-6, lum), lumContrast);
-          }
-          if (lumMin != null || lumMax != null) {
-            var lo = lumMin != null ? lumMin : 0;
-            var hi = lumMax != null ? lumMax : 1;
-            lum = lo + lum * (hi - lo);
-          }
-          if (rockTint) {
-            colors[vidx * 3] = lum * 0.52;
-            colors[vidx * 3 + 1] = lum * 0.43;
-            colors[vidx * 3 + 2] = lum * 0.34;
-          } else {
-            colors[vidx * 3] = lum;
-            colors[vidx * 3 + 1] = lum;
-            colors[vidx * 3 + 2] = lum;
-          }
+          colors[vidx * 3] = lum;
+          colors[vidx * 3 + 1] = lum;
+          colors[vidx * 3 + 2] = lum;
         }
 
         g = sdfGradient(sdf, px, py, pz, eps);
@@ -558,12 +529,6 @@
     var matRough = options.materialRoughness != null ? options.materialRoughness : 0.88;
     var matMetal = options.materialMetalness != null ? options.materialMetalness : 0.03;
     var cobbleDispMul = options.cobbleDisplacementMul != null ? options.cobbleDisplacementMul : 1;
-    var lumRemap = {
-      contrast: options.vertexLuminanceContrast,
-      min: options.vertexLuminanceMin,
-      max: options.vertexLuminanceMax,
-      rockTint: options.vertexRockTint
-    };
 
     var H = tiles.length;
     var W = tiles[0].length;
@@ -636,21 +601,7 @@
     if (soup.length < 9) {
       geo = new THREE.BoxGeometry(CS * 2, 0.2, CS * 2);
     } else {
-      geo = buildGeometryFromSoup(
-        soup,
-        sdf,
-        noise,
-        nScale,
-        nOct,
-        floorAmp,
-        wallAmp,
-        ceilAmp,
-        uvScale,
-        THREE,
-        albedoMode,
-        cobbleDispMul,
-        lumRemap
-      );
+      geo = buildGeometryFromSoup(soup, sdf, noise, nScale, nOct, floorAmp, wallAmp, ceilAmp, uvScale, THREE, albedoMode, cobbleDispMul);
     }
 
     var matOpts = {
