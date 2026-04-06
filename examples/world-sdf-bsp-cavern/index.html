@@ -69,7 +69,8 @@
       <div class="hint">
         Each BSP room gets its own vaulted peak (max of per-room Gaussians; spread reaches into
         corridors). Hard ceiling cut vs wall tops. Vertex greyscale follows the same triplanar value-noise
-        as surface displacement (noise-dungeon style; no grain map). Dim scene, lamp above you.
+        as surface displacement (noise-dungeon style; no grain map). Dim scene: ambient + directional
+        tied to view (forward fill) + handheld spot.
       </div>
     </div>
 
@@ -83,7 +84,7 @@
       loading-screen="enabled: false"
     >
       <a-assets></a-assets>
-      <a-light type="ambient" color="#060504" intensity="0.03"></a-light>
+      <a-light type="ambient" color="#060504" intensity="0.033"></a-light>
       <a-sky color="#020208"></a-sky>
 
       <a-entity id="world-root"></a-entity>
@@ -132,6 +133,23 @@
       var _spotTarget = null;
       var _spotDir = null;
       var _spotWorldQ = null;
+      var _cameraDirLightEl = null;
+
+      /* A-Frame directional on the camera (-Z = view axis) so nearby surfaces in front read clearly. */
+      function ensureCameraDirectionalLight(camEl) {
+        if (_cameraDirLightEl || !camEl) return;
+        var fill = document.createElement('a-entity');
+        fill.setAttribute('id', 'camera-forward-directional');
+        fill.setAttribute('position', '0 0.06 0');
+        fill.setAttribute('light', {
+          type: 'directional',
+          color: '#f0e6dc',
+          intensity: 0.62,
+          castShadow: false
+        });
+        camEl.appendChild(fill);
+        _cameraDirLightEl = fill;
+      }
 
       function ensureHoverLight() {
         if (_spotLight) return;
@@ -155,6 +173,7 @@
           var t = now * 0.001;
           var camEl = document.getElementById('scene').querySelector('a-camera');
           if (camEl && camEl.object3D) {
+            ensureCameraDirectionalLight(camEl);
             /* Move spot light to camera world position */
             camEl.object3D.getWorldPosition(_spotLight.position);
             /* Aim target along camera's world forward (-Z) */
