@@ -57,7 +57,7 @@
     You have to go to the edge.
   </div>
   <div class="enter">[ click to enter ]</div>
-  <div class="controls">WASD move · click + drag look · click objects to interact</div>
+  <div class="controls">WASD move · drag to look · E to interact</div>
 </div>
 
 <div id="msgbox">
@@ -144,7 +144,7 @@
   </a-entity>
 
   <!-- Label above figure -->
-  <a-text id="figure-label" value="click" position="0 2.1 -2"
+  <a-text id="figure-label" value="[ E ]" position="0 2.1 -2"
           text="color: #804040; width: 3; align: center; font: monoid"
           look-at="[camera]"
           animation="property: position; from: 0 2.05 -2; to: 0 2.15 -2; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
@@ -183,7 +183,7 @@ function closeMsg() {
 }
 
 var clicked = false;
-document.getElementById('figure-click').addEventListener('click', function() {
+document.getElementById('figure-click').addEventListener('interact', function() {
   if (clicked) return;
   clicked = true;
   document.getElementById('figure-label').setAttribute('visible', false);
@@ -194,6 +194,17 @@ document.getElementById('figure-click').addEventListener('click', function() {
   setTimeout(function() {
     document.getElementById('door-prompt').classList.add('show');
   }, 1500);
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'e' && e.key !== 'E') return;
+  var cursorEl = document.querySelector('[raycaster]');
+  if (!cursorEl) return;
+  var raycaster = cursorEl.components.raycaster;
+  if (!raycaster) return;
+  var els = raycaster.intersectedEls;
+  if (!els || !els.length) return;
+  els[0].emit('interact');
 });
 </script>
 

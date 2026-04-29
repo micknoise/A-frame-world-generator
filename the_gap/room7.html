@@ -183,7 +183,7 @@ function closeMsg() {
 }
 
 Object.keys(objData).forEach(function(id) {
-  document.getElementById(id).addEventListener('click', function() {
+  document.getElementById(id).addEventListener('interact', function() {
     if (this.dataset.done) return; this.dataset.done = '1';
     found++;
     var d = objData[id];
@@ -228,6 +228,17 @@ function showRiddle() {
 
   box.classList.add('show');
 }
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'e' && e.key !== 'E') return;
+  var cursorEl = document.querySelector('[raycaster]');
+  if (!cursorEl) return;
+  var raycaster = cursorEl.components.raycaster;
+  if (!raycaster) return;
+  var els = raycaster.intersectedEls;
+  if (!els || !els.length) return;
+  els[0].emit('interact');
+});
 </script>
 </body>
 </html>

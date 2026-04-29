@@ -114,7 +114,7 @@
     <a-box width="0.05" height="2.5" depth="1.2" material="color: #1a1a2a"></a-box>
     <a-box class="clickable" id="door1" position="0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
            material="color: #6060c0; emissive: #4040a0; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="KNOCK" position="0.1 1.7 0" rotation="0 90 0"
+    <a-text value="[ E ]" position="0.1 1.7 0" rotation="0 90 0"
             text="color: #404060; width: 1.5; align: center; font: monoid" id="label1"></a-text>
   </a-entity>
 
@@ -123,7 +123,7 @@
     <a-box width="0.05" height="2.5" depth="1.2" material="color: #1a1a2a"></a-box>
     <a-box class="clickable" id="door2" position="-0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
            material="color: #6060c0; emissive: #4040a0; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="KNOCK" position="-0.1 1.7 0" rotation="0 -90 0"
+    <a-text value="[ E ]" position="-0.1 1.7 0" rotation="0 -90 0"
             text="color: #404060; width: 1.5; align: center; font: monoid" id="label2"></a-text>
   </a-entity>
 
@@ -132,7 +132,7 @@
     <a-box width="0.05" height="2.5" depth="1.2" material="color: #1a1a2a"></a-box>
     <a-box class="clickable" id="door3" position="0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
            material="color: #6060c0; emissive: #4040a0; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="KNOCK" position="0.1 1.7 0" rotation="0 90 0"
+    <a-text value="[ E ]" position="0.1 1.7 0" rotation="0 90 0"
             text="color: #404060; width: 1.5; align: center; font: monoid" id="label3"></a-text>
   </a-entity>
 
@@ -141,7 +141,7 @@
     <a-box width="0.05" height="2.5" depth="1.2" material="color: #2a1a2a"></a-box>
     <a-box class="clickable" id="door4" position="-0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
            material="color: #a04080; emissive: #802060; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="KNOCK" position="-0.1 1.7 0" rotation="0 -90 0"
+    <a-text value="[ E ]" position="-0.1 1.7 0" rotation="0 -90 0"
             text="color: #604060; width: 1.5; align: center; font: monoid" id="label4"></a-text>
     <a-entity light="type: point; color: #a04080; intensity: 0.2; distance: 3" position="0 1.5 0"></a-entity>
   </a-entity>
@@ -186,7 +186,7 @@ function doorClicked(id) {
 }
 
 // Door 1
-document.getElementById('door1').addEventListener('click', function() {
+document.getElementById('door1').addEventListener('interact', function() {
   if (this.dataset.done) return; this.dataset.done = '1';
   doorClicked(1);
   showMsg('Voice behind the door',
@@ -194,7 +194,7 @@ document.getElementById('door1').addEventListener('click', function() {
 });
 
 // Door 2
-document.getElementById('door2').addEventListener('click', function() {
+document.getElementById('door2').addEventListener('interact', function() {
   if (this.dataset.done) return; this.dataset.done = '1';
   doorClicked(2);
   showMsg('Voice behind the door',
@@ -202,7 +202,7 @@ document.getElementById('door2').addEventListener('click', function() {
 });
 
 // Door 3
-document.getElementById('door3').addEventListener('click', function() {
+document.getElementById('door3').addEventListener('interact', function() {
   if (this.dataset.done) return; this.dataset.done = '1';
   doorClicked(3);
   showMsg('Voice behind the door',
@@ -210,7 +210,7 @@ document.getElementById('door3').addEventListener('click', function() {
 });
 
 // Door 4 — riddle
-document.getElementById('door4').addEventListener('click', function() {
+document.getElementById('door4').addEventListener('interact', function() {
   if (this.dataset.done) return; this.dataset.done = '1';
   doorClicked(4);
   showRiddle();
@@ -264,6 +264,17 @@ AFRAME.registerComponent('look-at', {
     this.el.object3D.getWorldPosition(pos);
     this.el.object3D.rotation.y = Math.atan2(target.x - pos.x, target.z - pos.z);
   }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'e' && e.key !== 'E') return;
+  var cursorEl = document.querySelector('[raycaster]');
+  if (!cursorEl) return;
+  var raycaster = cursorEl.components.raycaster;
+  if (!raycaster) return;
+  var els = raycaster.intersectedEls;
+  if (!els || !els.length) return;
+  els[0].emit('interact');
 });
 </script>
 </body>

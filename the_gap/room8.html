@@ -130,7 +130,7 @@
 <script>
 var edgeClicked = false;
 
-document.getElementById('edge-marker').addEventListener('click', function() {
+document.getElementById('edge-marker').addEventListener('interact', function() {
   if (edgeClicked) return;
   edgeClicked = true;
 
@@ -153,6 +153,17 @@ document.getElementById('edge-marker').addEventListener('click', function() {
     '<em>Next week: choosing and designing methods. Once you have a gap, you need a way to investigate it.</em>';
 
   panel.classList.add('show');
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'e' && e.key !== 'E') return;
+  var cursorEl = document.querySelector('[raycaster]');
+  if (!cursorEl) return;
+  var raycaster = cursorEl.components.raycaster;
+  if (!raycaster) return;
+  var els = raycaster.intersectedEls;
+  if (!els || !els.length) return;
+  els[0].emit('interact');
 });
 </script>
 </body>

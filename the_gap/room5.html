@@ -174,13 +174,24 @@ function closeMsg() {
 }
 
 Object.keys(phoneData).forEach(function(id) {
-  document.getElementById(id).addEventListener('click', function() {
+  document.getElementById(id).addEventListener('interact', function() {
     if (this.dataset.done) return; this.dataset.done = '1';
     calls++;
     document.getElementById('count').textContent = calls;
     var d = phoneData[id];
     showMsg(d.speaker, d.text);
   });
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'e' && e.key !== 'E') return;
+  var cursorEl = document.querySelector('[raycaster]');
+  if (!cursorEl) return;
+  var raycaster = cursorEl.components.raycaster;
+  if (!raycaster) return;
+  var els = raycaster.intersectedEls;
+  if (!els || !els.length) return;
+  els[0].emit('interact');
 });
 </script>
 </body>
