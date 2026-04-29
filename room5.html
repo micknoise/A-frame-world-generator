@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Room 5 — The Telephone Room</title>
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #msgbox {
+      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
+      background: rgba(8,5,5,0.94); border-top: 1px solid #352520;
+      padding: 24px 32px; box-sizing: border-box;
+      font-family: 'Courier New', monospace; color: #c4a0a0;
+      display: none; max-height: 45vh; overflow-y: auto;
+    }
+    #msgbox.show { display: block; }
+    #msgbox .speaker { font-size: 0.65rem; letter-spacing: 0.2em; color: #a05050; text-transform: uppercase; margin-bottom: 8px; }
+    #msgbox .text { font-size: 0.85rem; line-height: 1.8; }
+    #msgbox .dismiss { font-size: 0.65rem; color: #604040; margin-top: 12px; letter-spacing: 0.15em; cursor: pointer; }
+    #msgbox .dismiss:hover { color: #c4a0a0; }
+
+    #counter {
+      position: fixed; top: 20px; left: 20px; z-index: 100;
+      font-family: 'Courier New', monospace; font-size: 0.7rem;
+      color: #604040; letter-spacing: 0.15em; pointer-events: none;
+    }
+
+    #door-prompt {
+      position: fixed; top: 20px; right: 20px; z-index: 100;
+      font-family: 'Courier New', monospace; display: none;
+    }
+    #door-prompt.show { display: block; }
+    #door-prompt a {
+      color: #a05050; font-size: 0.75rem; letter-spacing: 0.15em;
+      text-decoration: none; border: 1px solid #352520; padding: 10px 20px;
+      transition: all 0.3s;
+    }
+    #door-prompt a:hover { color: #c4a0a0; border-color: #a05050; }
+  </style>
+</head>
+<body>
+
+<div id="counter">Calls received: <span id="count">0</span> / 5</div>
+
+<div id="msgbox">
+  <div class="speaker" id="msg-speaker"></div>
+  <div class="text" id="msg-text"></div>
+  <div class="dismiss" onclick="closeMsg()">[ hang up ]</div>
+</div>
+
+<div id="door-prompt">
+  <a href="room6.html">Through the mirror →</a>
+</div>
+
+<a-scene fog="type: exponential; color: #0a0505; density: 0.04">
+  <a-sky color="#0a0505"></a-sky>
+  <a-entity light="type: ambient; color: #2a1818; intensity: 0.3"></a-entity>
+
+  <!-- Camera -->
+  <a-entity position="0 1.6 4">
+    <a-entity camera look-controls wasd-controls="acceleration: 20">
+      <a-entity cursor="fuse: false"
+                position="0 0 -1"
+                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
+                material="color: #c4a0a0; shader: flat; opacity: 0.5"
+                raycaster="objects: .clickable; far: 15"></a-entity>
+    </a-entity>
+  </a-entity>
+
+  <!-- Floor — dark carpet -->
+  <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10"
+           material="color: #100808; roughness: 0.95"></a-plane>
+
+  <!-- Ceiling -->
+  <a-plane position="0 3.5 0" rotation="90 0 0" width="10" height="10"
+           material="color: #080505"></a-plane>
+
+  <!-- Walls — wallpapered feel -->
+  <a-box position="-5 1.75 0" width="0.1" height="3.5" depth="10" material="color: #1a0d0d; roughness: 0.8"></a-box>
+  <a-box position="5 1.75 0" width="0.1" height="3.5" depth="10" material="color: #1a0d0d; roughness: 0.8"></a-box>
+  <a-box position="0 1.75 -5" width="10" height="3.5" depth="0.1" material="color: #1a0d0d; roughness: 0.8"></a-box>
+  <a-box position="0 1.75 5" width="10" height="3.5" depth="0.1" material="color: #1a0d0d; roughness: 0.8"></a-box>
+
+  <!-- Central chandelier (warm) -->
+  <a-entity position="0 3.2 0">
+    <a-sphere radius="0.15" material="color: #e8a040; emissive: #e8a040; emissiveIntensity: 0.4"></a-sphere>
+    <a-entity light="type: point; color: #e8a040; intensity: 0.5; distance: 6"></a-entity>
+  </a-entity>
+
+  <!-- Room title -->
+  <a-text value="PICK UP THE PHONES" position="0 2.8 -4.8"
+          text="color: #4a2020; width: 6; align: center; font: monoid"></a-text>
+
+  <!-- PHONE 1: Future Work sections — on small table, left front -->
+  <a-entity position="-3 0 2">
+    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
+    <!-- Phone body -->
+    <a-box class="clickable" id="phone1" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
+           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
+    <!-- Handset -->
+    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
+                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
+    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
+    <a-text value="1" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  </a-entity>
+
+  <!-- PHONE 2: Survey papers — right front -->
+  <a-entity position="3 0 2">
+    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
+    <a-box class="clickable" id="phone2" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
+           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
+    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
+                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
+    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
+    <a-text value="2" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  </a-entity>
+
+  <!-- PHONE 3: Citation chains — left back -->
+  <a-entity position="-3 0 -2">
+    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
+    <a-box class="clickable" id="phone3" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
+           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
+    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
+                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
+    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
+    <a-text value="3" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  </a-entity>
+
+  <!-- PHONE 4: Exhibitions not just papers — right back -->
+  <a-entity position="3 0 -2">
+    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
+    <a-box class="clickable" id="phone4" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
+           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
+    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
+                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
+    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
+    <a-text value="4" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  </a-entity>
+
+  <!-- PHONE 5: Talk to people — centre back -->
+  <a-entity position="0 0 -3.5">
+    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
+    <a-box class="clickable" id="phone5" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
+           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
+    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
+                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
+    <a-entity light="type: point; color: #cc6060; intensity: 0.3; distance: 2" position="0 0.8 0"></a-entity>
+    <a-text value="5" position="0 0.8 0" text="color: #cc6060; width: 1; align: center; font: monoid"></a-text>
+  </a-entity>
+
+</a-scene>
+
+<script>
+var calls = 0;
+var phoneData = {
+  phone1: { speaker: 'Caller 1', text: 'Read the "future work" sections. Every good paper ends by saying what it didn\'t do. Those are gaps, pre-identified for you. Start there. It\'s the easiest strategy and the most underused.' },
+  phone2: { speaker: 'Caller 2', text: 'Read survey papers and literature reviews. These map a field in one document. They\'re the fastest way to understand what exists and where the edges are. One good survey can save you weeks.' },
+  phone3: { speaker: 'Caller 3', text: 'Follow citation chains. If Paper A cites Paper B, and B cites C — follow the chain. At some point the chain thins out. That thinning is the frontier. That\'s where you want to be.' },
+  phone4: { speaker: 'Caller 4', text: 'Look at what\'s exhibited, not just what\'s published. In creative computing, major artworks often precede papers. Check Ars Electronica, ISEA, NeurIPS Creativity workshops, transmediale, festival archives. Ignoring this is like reviewing physics and only checking half the journals.' },
+  phone5: { speaker: 'Caller 5', text: 'Talk to people. Ask practitioners and researchers what they think is unresolved. You\'d be surprised how often the answer is "nobody has tried that." The frontier isn\'t always in the papers. Sometimes it\'s in the conversations around them.' }
+};
+
+function showMsg(speaker, text) {
+  document.getElementById('msg-speaker').textContent = speaker;
+  document.getElementById('msg-text').textContent = text;
+  document.getElementById('msgbox').classList.add('show');
+}
+
+function closeMsg() {
+  document.getElementById('msgbox').classList.remove('show');
+  if (calls >= 5) {
+    document.getElementById('door-prompt').classList.add('show');
+  }
+}
+
+Object.keys(phoneData).forEach(function(id) {
+  document.getElementById(id).addEventListener('click', function() {
+    if (this.dataset.done) return; this.dataset.done = '1';
+    calls++;
+    document.getElementById('count').textContent = calls;
+    var d = phoneData[id];
+    showMsg(d.speaker, d.text);
+  });
+});
+</script>
+</body>
+</html>

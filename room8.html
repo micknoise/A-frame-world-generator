@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Room 8 — The Edge</title>
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #final-text {
+      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
+      background: rgba(0,0,0,0.85); border-top: 1px solid #333;
+      padding: 28px 32px; box-sizing: border-box;
+      font-family: 'Courier New', monospace; color: #c0c0c0;
+      display: none; max-height: 55vh; overflow-y: auto;
+    }
+    #final-text.show { display: block; }
+    #final-text .title { font-size: 0.65rem; letter-spacing: 0.25em; color: #606060; text-transform: uppercase; margin-bottom: 12px; }
+    #final-text .body { font-size: 0.85rem; line-height: 1.9; color: #b0b0b0; margin-bottom: 16px; }
+    #final-text .body strong { color: #e0e0e0; }
+    #final-text .prompt { font-size: 0.8rem; line-height: 1.8; color: #808080; border-top: 1px solid #2a2a2a; padding-top: 16px; }
+
+    #begin {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #000; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-family: 'Courier New', monospace; color: #808080; cursor: pointer;
+    }
+    #begin.gone { display: none; }
+    #begin .line { font-size: 0.85rem; line-height: 2; text-align: center; max-width: 500px; }
+    #begin .enter { font-size: 0.7rem; letter-spacing: 0.3em; color: #505050; margin-top: 2em; animation: p 2s ease infinite; }
+    @keyframes p { 0%,100%{opacity:0.3} 50%{opacity:1} }
+  </style>
+</head>
+<body>
+
+<div id="begin" onclick="this.classList.add('gone')">
+  <div class="line">
+    You've walked through seven rooms.<br>
+    You've heard the voices. Seen the absences.<br>
+    Learned to tell the real gaps from the false ones.<br><br>
+    Now step outside.
+  </div>
+  <div class="enter">[ click to continue ]</div>
+</div>
+
+<div id="final-text">
+  <div class="title">The Edge</div>
+  <div class="body" id="final-body"></div>
+  <div class="prompt" id="final-prompt"></div>
+</div>
+
+<a-scene fog="type: exponential; color: #020204; density: 0.008">
+  <a-sky color="#020204"></a-sky>
+  <a-entity light="type: ambient; color: #101018; intensity: 0.25"></a-entity>
+
+  <!-- Camera — starting indoors, facing the door -->
+  <a-entity position="0 1.6 4">
+    <a-entity camera look-controls wasd-controls="acceleration: 20">
+      <a-entity cursor="fuse: false"
+                position="0 0 -1"
+                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
+                material="color: #a0a0a0; shader: flat; opacity: 0.4"
+                raycaster="objects: .clickable; far: 20"></a-entity>
+    </a-entity>
+  </a-entity>
+
+  <!-- Small vestibule behind you -->
+  <a-plane position="0 0 4" rotation="-90 0 0" width="4" height="4"
+           material="color: #0a0a0c; roughness: 0.9"></a-plane>
+  <a-box position="-2 1.5 4" width="0.1" height="3" depth="4" material="color: #0d0d10"></a-box>
+  <a-box position="2 1.5 4" width="0.1" height="3" depth="4" material="color: #0d0d10"></a-box>
+  <a-box position="0 1.5 6" width="4" height="3" depth="0.1" material="color: #0d0d10"></a-box>
+  <a-plane position="0 3 4" rotation="90 0 0" width="4" height="4" material="color: #060608"></a-plane>
+  <a-entity light="type: point; color: #c0c0d0; intensity: 0.3; distance: 5" position="0 2.5 4"></a-entity>
+
+  <!-- THE EDGE — ground extends forward then stops abruptly -->
+  <a-plane position="0 0 -4" rotation="-90 0 0" width="60" height="12"
+           material="color: #0c0c0e; roughness: 0.7; metalness: 0.15"></a-plane>
+
+  <!-- Edge line — the actual cliff edge at z = -10 -->
+  <a-plane position="0 0.01 -10" rotation="-90 0 0" width="60" height="0.08"
+           material="color: #c0c0c0; emissive: #808080; emissiveIntensity: 0.5"></a-plane>
+
+  <!-- Beyond the edge: NOTHING. Just void and distant lights -->
+
+  <!-- Distant stars / points of light in the void — suggest infinity -->
+  <a-sphere position="-8 -2 -25" radius="0.04" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.8"></a-sphere>
+  <a-sphere position="12 -5 -40" radius="0.05" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.6"></a-sphere>
+  <a-sphere position="-15 -8 -55" radius="0.06" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.5"></a-sphere>
+  <a-sphere position="5 -3 -35" radius="0.03" material="color: #ffe0c0; emissive: #ffc080; emissiveIntensity: 0.7"></a-sphere>
+  <a-sphere position="-3 -6 -45" radius="0.04" material="color: #e0ffe0; emissive: #80ff80; emissiveIntensity: 0.5"></a-sphere>
+  <a-sphere position="20 -10 -60" radius="0.07" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.4"></a-sphere>
+  <a-sphere position="-20 -4 -30" radius="0.03" material="color: #ffe0e0; emissive: #ffc0c0; emissiveIntensity: 0.6"></a-sphere>
+  <a-sphere position="8 -12 -70" radius="0.08" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.3"></a-sphere>
+  <a-sphere position="-12 -15 -80" radius="0.1" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.2"></a-sphere>
+  <a-sphere position="0 -1 -20" radius="0.03" material="color: #ffe0c0; emissive: #ffc080; emissiveIntensity: 0.8"></a-sphere>
+  <a-sphere position="15 -7 -50" radius="0.05" material="color: #c0e0ff; emissive: #80c0ff; emissiveIntensity: 0.5"></a-sphere>
+  <a-sphere position="-25 -3 -35" radius="0.04" material="color: #e0e0ff; emissive: #a0a0ff; emissiveIntensity: 0.5"></a-sphere>
+
+  <!-- Gentle animation on some -->
+  <a-sphere position="3 -4 -30" radius="0.03" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.6"
+            animation="property: position; to: 3.5 -3.5 -31; dur: 12000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="-6 -2 -22" radius="0.025" material="color: #ffe0c0; emissive: #ffc080; emissiveIntensity: 0.7"
+            animation="property: position; to: -5.5 -2.5 -23; dur: 9000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+
+  <!-- Text floating near the edge -->
+  <a-text value="THE EDGE" position="0 2.5 -9"
+          text="color: #505060; width: 12; align: center; font: monoid; letterSpacing: 12"></a-text>
+
+  <!-- Clickable marker at the edge itself -->
+  <a-entity position="0 0 -9">
+    <a-box class="clickable" id="edge-marker" position="0 0.4 0" width="1" height="0.8" depth="1"
+           material="opacity: 0; transparent: true"></a-box>
+    <a-text value="Stand here.\nLook out.\nClick." position="0 1.2 0"
+            text="color: #606070; width: 3; align: center; font: monoid"
+            animation="property: position; from: 0 1.15 0; to: 0 1.25 0; dur: 3000; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
+    <a-entity light="type: point; color: #8080a0; intensity: 0.2; distance: 4" position="0 1 0"></a-entity>
+  </a-entity>
+
+  <!-- Faint ground markings leading to edge -->
+  <a-plane position="0 0.005 0" rotation="-90 0 0" width="0.03" height="8"
+           material="color: #404050; emissive: #303040; emissiveIntensity: 0.2"></a-plane>
+
+  <!-- Wind sound suggestion — distant subtle light flickers -->
+  <a-entity light="type: point; color: #4040a0; intensity: 0.1; distance: 20" position="0 -5 -40"
+            animation="property: light.intensity; from: 0.05; to: 0.15; dur: 5000; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+
+</a-scene>
+
+<script>
+var edgeClicked = false;
+
+document.getElementById('edge-marker').addEventListener('click', function() {
+  if (edgeClicked) return;
+  edgeClicked = true;
+
+  // Hide the prompt text
+  this.parentElement.querySelector('a-text').setAttribute('visible', false);
+
+  var panel = document.getElementById('final-text');
+  document.getElementById('final-body').innerHTML =
+    'You\'re standing at the edge. Behind you: everything the field has done. Every paper written, every artwork made, every experiment run, every assumption taken for granted.<br><br>' +
+    'In front of you: everything it hasn\'t.<br><br>' +
+    'A gap is not just "nobody has done my project." A gap is a <strong>meaningful absence</strong> — something the field needs, or would benefit from, that doesn\'t yet exist.<br><br>' +
+    'Your gap statement has three parts:<br><br>' +
+    '<strong>1. What exists</strong> — what is the state of the field?<br>' +
+    '<strong>2. What is missing</strong> — what gap does your project address?<br>' +
+    '<strong>3. Why it matters</strong> — what does the field gain?<br><br>' +
+    'This is where your research lives. Not behind you in the known. Out there, in the dark, where nobody has been yet.';
+
+  document.getElementById('final-prompt').innerHTML =
+    'For this week: build your reading list. Find at least 5 core papers or works. Extract the five questions for each (question, method, contribution, limitations, relation to your project). Draft a gap statement using the three-part structure above. It doesn\'t need to be final. It needs to exist.<br><br>' +
+    '<em>Next week: choosing and designing methods. Once you have a gap, you need a way to investigate it.</em>';
+
+  panel.classList.add('show');
+});
+</script>
+</body>
+</html>
