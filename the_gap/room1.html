@@ -183,28 +183,31 @@ function closeMsg() {
 }
 
 var clicked = false;
-document.getElementById('figure-click').addEventListener('interact', function() {
+var hoveredEl = null;
+
+function handleFigureClick() {
   if (clicked) return;
   clicked = true;
   document.getElementById('figure-label').setAttribute('visible', false);
   showMsg('The Figure',
     'You cannot find the edge from inside your own head. You find it by reading what exists, understanding what it does, and identifying what it doesn\'t do. That gap — between what exists and what doesn\'t yet — is where your research lives. Go. Find the edge.'
   );
-  // Show the door after a moment
   setTimeout(function() {
     document.getElementById('door-prompt').classList.add('show');
   }, 1500);
+}
+
+document.querySelector('a-scene').addEventListener('loaded', function() {
+  document.querySelectorAll('.clickable').forEach(function(el) {
+    el.addEventListener('mouseenter', function() { hoveredEl = el; });
+    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
+  });
 });
 
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'e' && e.key !== 'E') return;
-  var cursorEl = document.querySelector('[raycaster]');
-  if (!cursorEl) return;
-  var raycaster = cursorEl.components.raycaster;
-  if (!raycaster) return;
-  var els = raycaster.intersectedEls;
-  if (!els || !els.length) return;
-  els[0].emit('interact');
+  if (!hoveredEl) return;
+  if (hoveredEl.id === 'figure-click') handleFigureClick();
 });
 </script>
 

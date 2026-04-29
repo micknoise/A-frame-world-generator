@@ -173,25 +173,24 @@ function closeMsg() {
   }
 }
 
-Object.keys(phoneData).forEach(function(id) {
-  document.getElementById(id).addEventListener('interact', function() {
-    if (this.dataset.done) return; this.dataset.done = '1';
-    calls++;
-    document.getElementById('count').textContent = calls;
-    var d = phoneData[id];
-    showMsg(d.speaker, d.text);
+var hoveredEl = null;
+
+document.querySelector('a-scene').addEventListener('loaded', function() {
+  document.querySelectorAll('.clickable').forEach(function(el) {
+    el.addEventListener('mouseenter', function() { hoveredEl = el; });
+    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
   });
 });
 
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'e' && e.key !== 'E') return;
-  var cursorEl = document.querySelector('[raycaster]');
-  if (!cursorEl) return;
-  var raycaster = cursorEl.components.raycaster;
-  if (!raycaster) return;
-  var els = raycaster.intersectedEls;
-  if (!els || !els.length) return;
-  els[0].emit('interact');
+  if (!hoveredEl) return;
+  var d = phoneData[hoveredEl.id];
+  if (!d || hoveredEl.dataset.done) return;
+  hoveredEl.dataset.done = '1';
+  calls++;
+  document.getElementById('count').textContent = calls;
+  showMsg(d.speaker, d.text);
 });
 </script>
 </body>

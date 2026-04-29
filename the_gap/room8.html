@@ -130,13 +130,10 @@
 <script>
 var edgeClicked = false;
 
-document.getElementById('edge-marker').addEventListener('interact', function() {
+function handleEdge(el) {
   if (edgeClicked) return;
   edgeClicked = true;
-
-  // Hide the prompt text
-  this.parentElement.querySelector('a-text').setAttribute('visible', false);
-
+  el.parentElement.querySelector('a-text').setAttribute('visible', false);
   var panel = document.getElementById('final-text');
   document.getElementById('final-body').innerHTML =
     'You\'re standing at the edge. Behind you: everything the field has done. Every paper written, every artwork made, every experiment run, every assumption taken for granted.<br><br>' +
@@ -147,23 +144,25 @@ document.getElementById('edge-marker').addEventListener('interact', function() {
     '<strong>2. What is missing</strong> — what gap does your project address?<br>' +
     '<strong>3. Why it matters</strong> — what does the field gain?<br><br>' +
     'This is where your research lives. Not behind you in the known. Out there, in the dark, where nobody has been yet.';
-
   document.getElementById('final-prompt').innerHTML =
     'For this week: build your reading list. Find at least 5 core papers or works. Extract the five questions for each (question, method, contribution, limitations, relation to your project). Draft a gap statement using the three-part structure above. It doesn\'t need to be final. It needs to exist.<br><br>' +
     '<em>Next week: choosing and designing methods. Once you have a gap, you need a way to investigate it.</em>';
-
   panel.classList.add('show');
+}
+
+var hoveredEl = null;
+
+document.querySelector('a-scene').addEventListener('loaded', function() {
+  document.querySelectorAll('.clickable').forEach(function(el) {
+    el.addEventListener('mouseenter', function() { hoveredEl = el; });
+    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
+  });
 });
 
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'e' && e.key !== 'E') return;
-  var cursorEl = document.querySelector('[raycaster]');
-  if (!cursorEl) return;
-  var raycaster = cursorEl.components.raycaster;
-  if (!raycaster) return;
-  var els = raycaster.intersectedEls;
-  if (!els || !els.length) return;
-  els[0].emit('interact');
+  if (!hoveredEl) return;
+  if (hoveredEl.id === 'edge-marker') handleEdge(hoveredEl);
 });
 </script>
 </body>

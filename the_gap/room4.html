@@ -202,17 +202,26 @@ function closeMsg() {
   }
 }
 
-Object.keys(gapData).forEach(function(id) {
-  document.getElementById(id).addEventListener('interact', function() {
-    if (this.dataset.done) return; this.dataset.done = '1';
-    found++;
-    document.getElementById('count').textContent = found;
-    var d = gapData[id];
-    showMsg(d.title, d.text);
+var hoveredEl = null;
+
+document.querySelector('a-scene').addEventListener('loaded', function() {
+  document.querySelectorAll('.clickable').forEach(function(el) {
+    el.addEventListener('mouseenter', function() { hoveredEl = el; });
+    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
   });
 });
 
-function showRiddle() {
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'e' && e.key !== 'E') return;
+  if (!hoveredEl) return;
+  var id = hoveredEl.id;
+  var d = gapData[id];
+  if (!d || hoveredEl.dataset.done) return;
+  hoveredEl.dataset.done = '1';
+  found++;
+  document.getElementById('count').textContent = found;
+  showMsg(d.title, d.text);
+});
   var box = document.getElementById('riddle-box');
   document.getElementById('riddle-q').textContent = 'You\'ve examined all six absences. Now: "Nobody has used diffusion models for live performance audio — they\'ve only been used offline." What type of gap is this?';
   var opts = document.getElementById('riddle-opts');
@@ -250,17 +259,6 @@ function showRiddle() {
 
   box.classList.add('show');
 }
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  var cursorEl = document.querySelector('[raycaster]');
-  if (!cursorEl) return;
-  var raycaster = cursorEl.components.raycaster;
-  if (!raycaster) return;
-  var els = raycaster.intersectedEls;
-  if (!els || !els.length) return;
-  els[0].emit('interact');
-});
 </script>
 </body>
 </html>

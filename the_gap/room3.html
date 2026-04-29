@@ -172,20 +172,26 @@ function closeMsg() {
   }
 }
 
-// The open file
-document.getElementById('file1').addEventListener('interact', function() {
-  if (this.dataset.done) return; this.dataset.done = '1';
-  cluesFound++;
-  showMsg('The File',
-    'A literature review is not a summary of everything you\'ve read. It is an argument about the state of a field. It says: here is what exists; here is what it does well; here is what it doesn\'t do, or hasn\'t yet tried; and here is the gap — which my project will address.');
-});
+var objectHandlers = {
+  file1: function() {
+    cluesFound++;
+    showMsg('The File',
+      'A literature review is not a summary of everything you\'ve read. It is an argument about the state of a field. It says: here is what exists; here is what it does well; here is what it doesn\'t do, or hasn\'t yet tried; and here is the gap — which my project will address.');
+  },
+  papers1: function() {
+    cluesFound++;
+    showMsg('The Papers',
+      'For each paper, extract five things: What\'s the research question? What\'s the method? What\'s the contribution? What are the limitations? How does it relate to your project? Do this for every paper. By the end, you\'ve almost written your review without realising.');
+  }
+};
 
-// The papers on the floor
-document.getElementById('papers1').addEventListener('interact', function() {
-  if (this.dataset.done) return; this.dataset.done = '1';
-  cluesFound++;
-  showMsg('The Papers',
-    'For each paper, extract five things: What\'s the research question? What\'s the method? What\'s the contribution? What are the limitations? How does it relate to your project? Do this for every paper. By the end, you\'ve almost written your review without realising.');
+var hoveredEl = null;
+
+document.querySelector('a-scene').addEventListener('loaded', function() {
+  document.querySelectorAll('.clickable').forEach(function(el) {
+    el.addEventListener('mouseenter', function() { hoveredEl = el; });
+    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
+  });
 });
 
 function showRiddle() {
@@ -228,13 +234,11 @@ function showRiddle() {
 
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'e' && e.key !== 'E') return;
-  var cursorEl = document.querySelector('[raycaster]');
-  if (!cursorEl) return;
-  var raycaster = cursorEl.components.raycaster;
-  if (!raycaster) return;
-  var els = raycaster.intersectedEls;
-  if (!els || !els.length) return;
-  els[0].emit('interact');
+  if (!hoveredEl) return;
+  var fn = objectHandlers[hoveredEl.id];
+  if (!fn || hoveredEl.dataset.done) return;
+  hoveredEl.dataset.done = '1';
+  fn();
 });
 </script>
 </body>
