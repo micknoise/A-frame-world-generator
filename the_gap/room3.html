@@ -1,244 +1,175 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Room 3 — The Filing Room</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #msgbox {
-      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
-      background: rgba(8,8,5,0.94); border-top: 1px solid #3a3520;
-      padding: 24px 32px; box-sizing: border-box;
-      font-family: 'Courier New', monospace; color: #c4b890;
-      display: none; max-height: 45vh; overflow-y: auto;
-    }
-    #msgbox.show { display: block; }
-    #msgbox .speaker { font-size: 0.65rem; letter-spacing: 0.2em; color: #806830; text-transform: uppercase; margin-bottom: 8px; }
-    #msgbox .text { font-size: 0.85rem; line-height: 1.8; }
-    #msgbox .dismiss { font-size: 0.65rem; color: #605020; margin-top: 12px; letter-spacing: 0.15em; cursor: pointer; }
-    #msgbox .dismiss:hover { color: #c4b890; }
-
-    #door-prompt {
-      position: fixed; top: 20px; right: 20px; z-index: 100;
-      font-family: 'Courier New', monospace; display: none;
-    }
-    #door-prompt.show { display: block; }
-    #door-prompt a {
-      color: #806830; font-size: 0.75rem; letter-spacing: 0.15em;
-      text-decoration: none; border: 1px solid #3a3520; padding: 10px 20px;
-      transition: all 0.3s;
-    }
-    #door-prompt a:hover { color: #c4b890; border-color: #806830; }
-
-    #riddle-box {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      z-index: 200; background: rgba(8,8,5,0.96); border: 1px solid #3a3520;
-      padding: 32px; max-width: 550px; width: 90%;
-      font-family: 'Courier New', monospace; color: #c4b890; display: none;
-    }
-    #riddle-box.show { display: block; }
-    #riddle-box .q { font-size: 0.9rem; line-height: 1.8; margin-bottom: 1.5em; }
-    #riddle-box button {
-      display: block; width: 100%; text-align: left; padding: 12px 16px;
-      background: transparent; border: 1px solid #3a3520; color: #c4b890;
-      font-family: 'Courier New', monospace; font-size: 0.8rem; margin-bottom: 8px;
-      cursor: pointer; transition: all 0.3s; line-height: 1.5;
-    }
-    #riddle-box button:hover { border-color: #806830; background: #12120a; }
-    #riddle-box button.correct { border-color: #508050; color: #80c080; }
-    #riddle-box button.wrong { border-color: #805050; color: #c08080; }
-    #riddle-box .feedback { font-size: 0.8rem; line-height: 1.7; color: #8a8060; margin-top: 1em; display: none; }
-    #riddle-box .feedback.show { display: block; }
-  </style>
+<meta charset="utf-8">
+<title>The Edge — Room 3: The Filing Room</title>
+<script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+<script>if(window.AFRAME&&AFRAME.components&&AFRAME.components.grabbable)delete AFRAME.components.grabbable;</script>
+<script src="../libs/a-game/a-game.min.js"></script>
+<style>
+body{margin:0;overflow:hidden}
+#msg{position:fixed;bottom:0;left:0;width:100%;z-index:100;background:rgba(7,6,3,.96);border-top:1px solid #362a10;padding:28px 44px;box-sizing:border-box;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .3s ease,transform .3s ease;max-height:48vh;overflow-y:auto}
+#msg.show{opacity:1;pointer-events:auto;transform:none}
+#msg .spk{font-size:.52rem;letter-spacing:.38em;color:#806028;text-transform:uppercase;margin-bottom:14px}
+#msg .txt{font-size:.88rem;line-height:2.15;color:#c4b080;max-width:700px}
+#msg .dis{font-size:.52rem;color:#4a3418;margin-top:18px;letter-spacing:.28em;cursor:pointer;text-transform:uppercase;display:inline-block;border:1px solid #362a10;padding:7px 18px;transition:color .2s,border-color .2s}
+#msg .dis:hover{color:#c4b080;border-color:#806028}
+#dec{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;background:rgba(7,6,3,.97);border:1px solid #362a10;padding:36px;max-width:570px;width:90%;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .3s ease}
+#dec.show{opacity:1;pointer-events:auto}
+#dec .q{font-size:.86rem;line-height:2;color:#c4b080;margin-bottom:1.6em}
+#dec button{display:block;width:100%;text-align:left;padding:12px 16px;background:transparent;border:1px solid #362a10;color:#c4b080;font-family:'Courier New',monospace;font-size:.76rem;margin-bottom:8px;cursor:pointer;transition:border-color .2s;line-height:1.65}
+#dec button:hover{border-color:#806028}
+#dec button.cor{border-color:#508050;color:#80c080}
+#dec button.wrg{border-color:#805050;color:#c08080}
+#dec .fb{font-size:.76rem;line-height:1.85;color:#806028;margin-top:1.1em;display:none}
+#dec .fb.show{display:block}
+#exit{position:fixed;top:22px;right:22px;z-index:100;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .5s ease}
+#exit.show{opacity:1;pointer-events:auto}
+#exit a{color:#806028;font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;text-decoration:none;border:1px solid #362a10;padding:10px 22px;display:block;transition:all .3s}
+#exit a:hover{color:#c4b080;border-color:#806028}
+</style>
 </head>
 <body>
-
-<div id="msgbox">
-  <div class="speaker" id="msg-speaker"></div>
-  <div class="text" id="msg-text"></div>
-  <div class="dismiss" onclick="closeMsg()">[ continue ]</div>
+<input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true">
+<div id="msg">
+  <div class="spk" id="spk"></div>
+  <div class="txt" id="txt"></div>
+  <div class="dis" onclick="closeMsg()">[ continue ]</div>
 </div>
-
-<div id="riddle-box">
-  <div class="q" id="riddle-q"></div>
-  <div id="riddle-opts"></div>
-  <div class="feedback" id="riddle-fb"></div>
+<div id="dec">
+  <div class="q" id="dq"></div>
+  <div id="dopts"></div>
+  <div class="fb" id="dfb"></div>
 </div>
-
-<div id="door-prompt">
-  <a href="room4.html">Descend to the gallery →</a>
-</div>
-
-<a-scene fog="type: exponential; color: #08080a; density: 0.04">
-  <a-sky color="#08080a"></a-sky>
-  <a-entity light="type: ambient; color: #2a2818; intensity: 0.3"></a-entity>
-
-  <!-- Camera -->
-  <a-entity position="0 1.6 4">
-    <a-entity camera look-controls wasd-controls="acceleration: 20">
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
-                material="color: #c4b890; shader: flat; opacity: 0.5"
-                raycaster="objects: .clickable; far: 15"></a-entity>
-    </a-entity>
-  </a-entity>
-
+<div id="exit"><a href="room4.html">Descend to the gallery &#8594;</a></div>
+<a-scene physics="workerUrl: ../libs/a-game/cannonWorker.min.js; gravity: 0 -9.8 0"
+         fog="type: exponential; color: #07060a; density: 0.042" loading-screen="enabled: false">
+  <a-player id="player" locomotion grabbing position="0 0 4"></a-player>
+  <a-sky color="#060508"></a-sky>
+  <a-entity light="type: ambient; color: #2a2010; intensity: 0.35"></a-entity>
+  <a-entity light="type: point; color: #c8b880; intensity: .45; distance: 6" position="0 3.8 0"
+            animation="property: light.intensity; from: .35; to: .55; dur: 600; easing: linear; loop: true; dir: alternate"></a-entity>
+  <a-entity light="type: point; color: #e8a030; intensity: .65; distance: 4.5" position="0 3.5 0"></a-entity>
+  <a-entity light="type: point; color: #e0a020; intensity: .2; distance: 3.5" position="-4.5 3 -4.5"
+            animation="property: light.intensity; from: .05; to: .35; dur: 380; easing: linear; loop: true; dir: alternate"></a-entity>
   <!-- Floor -->
-  <a-plane position="0 0 0" rotation="-90 0 0" width="12" height="12"
-           material="color: #0a0a08; roughness: 0.95"></a-plane>
-
+  <a-box floor position="0 -0.05 0" width="12" height="0.1" depth="12" material="color: #0a0906; roughness: .95"></a-box>
   <!-- Ceiling -->
-  <a-plane position="0 4 0" rotation="90 0 0" width="12" height="12"
-           material="color: #06060a"></a-plane>
-
+  <a-plane position="0 4.2 0" rotation="90 0 0" width="12" height="12" material="color: #050403"></a-plane>
+  <!-- Fluorescent tube (flickering) -->
+  <a-box position="0 4.15 0" width=".04" height=".04" depth="3.5"
+         material="color: #c8b880; emissive: #c8b880; emissiveIntensity: .5"
+         animation="property: material.emissiveIntensity; from: .3; to: .6; dur: 700; easing: linear; loop: true; dir: alternate"></a-box>
   <!-- Walls -->
-  <a-box position="-6 2 0" width="0.1" height="4" depth="12" material="color: #0d0d0a"></a-box>
-  <a-box position="6 2 0" width="0.1" height="4" depth="12" material="color: #0d0d0a"></a-box>
-  <a-box position="0 2 -6" width="12" height="4" depth="0.1" material="color: #0d0d0a"></a-box>
-  <a-box position="0 2 6" width="12" height="4" depth="0.1" material="color: #0d0d0a"></a-box>
-
-  <!-- Rows of filing cabinets — left side -->
-  <a-entity id="cabinets-left">
-    <a-box position="-4.5 0.6 -4" width="0.8" height="1.2" depth="0.5" material="color: #1a1a14; metalness: 0.3"></a-box>
-    <a-box position="-4.5 0.6 -2.5" width="0.8" height="1.2" depth="0.5" material="color: #181814; metalness: 0.3"></a-box>
-    <a-box position="-4.5 0.6 -1" width="0.8" height="1.2" depth="0.5" material="color: #1a1a14; metalness: 0.3"></a-box>
-    <a-box position="-4.5 0.6 0.5" width="0.8" height="1.2" depth="0.5" material="color: #181814; metalness: 0.3"></a-box>
-    <a-box position="-4.5 0.6 2" width="0.8" height="1.2" depth="0.5" material="color: #1a1a14; metalness: 0.3"></a-box>
-    <a-box position="-4.5 0.6 3.5" width="0.8" height="1.2" depth="0.5" material="color: #181814; metalness: 0.3"></a-box>
-  </a-entity>
-
-  <!-- Cabinets — right side -->
-  <a-entity id="cabinets-right">
-    <a-box position="4.5 0.6 -4" width="0.8" height="1.2" depth="0.5" material="color: #181814; metalness: 0.3"></a-box>
-    <a-box position="4.5 0.6 -2.5" width="0.8" height="1.2" depth="0.5" material="color: #1a1a14; metalness: 0.3"></a-box>
-    <a-box position="4.5 0.6 -1" width="0.8" height="1.2" depth="0.5" material="color: #181814; metalness: 0.3"></a-box>
-    <a-box position="4.5 0.6 0.5" width="0.8" height="1.2" depth="0.5" material="color: #1a1a14; metalness: 0.3"></a-box>
-    <a-box position="4.5 0.6 2" width="0.8" height="1.2" depth="0.5" material="color: #181814; metalness: 0.3"></a-box>
-    <a-box position="4.5 0.6 3.5" width="0.8" height="1.2" depth="0.5" material="color: #1a1a14; metalness: 0.3"></a-box>
-  </a-entity>
-
-  <!-- Central table with single open file — the "argument" -->
-  <a-entity position="0 0 0">
-    <a-box width="2" height="0.7" depth="1" material="color: #1a180e; roughness: 0.8"></a-box>
-    <!-- Open file glowing -->
-    <a-box class="clickable" id="file1" position="0 0.4 0" width="0.7" height="0.06" depth="0.5"
-           material="color: #c4a050; emissive: #a08030; emissiveIntensity: 0.3"></a-box>
-    <a-text value="READ" position="0 0.9 0"
-            text="color: #806830; width: 2; align: center; font: monoid"
-            animation="property: position; from: 0 0.85 0; to: 0 0.95 0; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
-    <a-entity light="type: point; color: #e8a040; intensity: 0.5; distance: 4" position="0 1.2 0"></a-entity>
-  </a-entity>
-
-  <!-- Scattered papers on floor — the "reading list" that isn't enough -->
-  <a-plane position="-2 0.01 2" rotation="-89 25 0" width="0.3" height="0.4" material="color: #c4b890; opacity: 0.3"></a-plane>
-  <a-plane position="-1.5 0.01 3" rotation="-89 -10 0" width="0.25" height="0.35" material="color: #c4b890; opacity: 0.25"></a-plane>
-  <a-plane position="1.8 0.01 1.5" rotation="-89 40 0" width="0.3" height="0.4" material="color: #c4b890; opacity: 0.3"></a-plane>
-  <a-plane position="2.5 0.01 -1" rotation="-89 -30 0" width="0.25" height="0.35" material="color: #c4b890; opacity: 0.2"></a-plane>
-  <a-plane position="-1 0.01 -3" rotation="-89 15 0" width="0.3" height="0.4" material="color: #c4b890; opacity: 0.25"></a-plane>
-
-  <!-- Stack of papers on floor — clickable -->
-  <a-entity position="2.5 0 2.5">
-    <a-box class="clickable" id="papers1" position="0 0.08 0" width="0.5" height="0.15" depth="0.4"
-           material="color: #c4b890; opacity: 0.5"></a-box>
-    <a-text value="?" position="0 0.5 0"
-            text="color: #605020; width: 1.5; align: center; font: monoid"></a-text>
-  </a-entity>
-
-  <!-- Single fluorescent tube (eerie) -->
-  <a-box position="0 3.8 0" width="0.05" height="0.05" depth="3" material="color: #c8c0a0; emissive: #c8c0a0; emissiveIntensity: 0.4"></a-box>
-  <a-entity light="type: point; color: #c8c0a0; intensity: 0.4; distance: 5" position="0 3.5 0"></a-entity>
-
-  <!-- Flickering light in corner -->
-  <a-entity light="type: point; color: #e8a040; intensity: 0.2; distance: 3" position="-4 3 -4"
-            animation="property: light.intensity; from: 0.1; to: 0.3; dur: 300; easing: linear; loop: true; dir: alternate"></a-entity>
-
+  <a-box wall position="-6 2.1 0" width=".14" height="4.2" depth="12.3" material="color: #0c0b08; roughness: .9"></a-box>
+  <a-box wall position=" 6 2.1 0" width=".14" height="4.2" depth="12.3" material="color: #0c0b08; roughness: .9"></a-box>
+  <a-box wall position="0 2.1 -6" width="12.3" height="4.2" depth=".14" material="color: #0c0b08; roughness: .9"></a-box>
+  <a-box wall position="0 2.1  6" width="12.3" height="4.2" depth=".14" material="color: #0c0b08; roughness: .9"></a-box>
+  <!-- Filing cabinets left -->
+  <a-box position="-4.5 0.65 -4"   width=".85" height="1.3" depth=".55" material="color: #1a180e; metalness: .25; roughness: .8"></a-box>
+  <a-box position="-4.5 0.65 -2.4" width=".85" height="1.3" depth=".55" material="color: #181610; metalness: .25; roughness: .8"></a-box>
+  <a-box position="-4.5 0.65 -0.8" width=".85" height="1.3" depth=".55" material="color: #1a180e; metalness: .25; roughness: .8"></a-box>
+  <a-box position="-4.5 0.65  0.8" width=".85" height="1.3" depth=".55" material="color: #181610; metalness: .25; roughness: .8"></a-box>
+  <a-box position="-4.5 0.65  2.4" width=".85" height="1.3" depth=".55" material="color: #1a180e; metalness: .25; roughness: .8"></a-box>
+  <a-box position="-4.5 0.65  4"   width=".85" height="1.3" depth=".55" material="color: #181610; metalness: .25; roughness: .8"></a-box>
+  <!-- Drawer handles left -->
+  <a-box position="-4.08 0.78 -4"   width=".04" height=".05" depth=".35" material="color: #505040; metalness: .6"></a-box>
+  <a-box position="-4.08 0.52 -4"   width=".04" height=".05" depth=".35" material="color: #505040; metalness: .6"></a-box>
+  <a-box position="-4.08 0.78 -2.4" width=".04" height=".05" depth=".35" material="color: #505040; metalness: .6"></a-box>
+  <a-box position="-4.08 0.52 -2.4" width=".04" height=".05" depth=".35" material="color: #505040; metalness: .6"></a-box>
+  <a-box position="-4.08 0.78  0.8" width=".04" height=".05" depth=".35" material="color: #505040; metalness: .6"></a-box>
+  <a-box position="-4.08 0.52  0.8" width=".04" height=".05" depth=".35" material="color: #505040; metalness: .6"></a-box>
+  <!-- Filing cabinets right -->
+  <a-box position="4.5 0.65 -4"   width=".85" height="1.3" depth=".55" material="color: #181610; metalness: .25; roughness: .8"></a-box>
+  <a-box position="4.5 0.65 -2.4" width=".85" height="1.3" depth=".55" material="color: #1a180e; metalness: .25; roughness: .8"></a-box>
+  <a-box position="4.5 0.65 -0.8" width=".85" height="1.3" depth=".55" material="color: #181610; metalness: .25; roughness: .8"></a-box>
+  <a-box position="4.5 0.65  0.8" width=".85" height="1.3" depth=".55" material="color: #1a180e; metalness: .25; roughness: .8"></a-box>
+  <a-box position="4.5 0.65  2.4" width=".85" height="1.3" depth=".55" material="color: #181610; metalness: .25; roughness: .8"></a-box>
+  <a-box position="4.5 0.65  4"   width=".85" height="1.3" depth=".55" material="color: #1a180e; metalness: .25; roughness: .8"></a-box>
+  <!-- Scattered floor papers -->
+  <a-plane position="-2 .008 2"    rotation="-90 25 0" width=".32" height=".42" material="color: #c4b890; opacity: .28"></a-plane>
+  <a-plane position="-1.5 .008 3"  rotation="-90 -12 0" width=".28" height=".36" material="color: #c4b890; opacity: .22"></a-plane>
+  <a-plane position="1.8 .008 1.5" rotation="-90 42 0" width=".32" height=".42" material="color: #c4b890; opacity: .3"></a-plane>
+  <a-plane position="2.5 .008 -1"  rotation="-90 -28 0" width=".28" height=".36" material="color: #c4b890; opacity: .2"></a-plane>
+  <a-plane position="-1 .008 -3"   rotation="-90 18 0"  width=".32" height=".42" material="color: #c4b890; opacity: .25"></a-plane>
+  <a-plane position="0.4 .008 -4"  rotation="-90 -35 0" width=".26" height=".34" material="color: #c4b890; opacity: .18"></a-plane>
+  <!-- Central table -->
+  <a-box position="0 0.36 0" width="2.1" height=".72" depth="1.1" material="color: #1c180c; roughness: .85"></a-box>
+  <!-- Open glowing file on table -->
+  <a-box id="file1" grabbable="physics:false; immovable:true;"
+         position="0 0.78 0" width=".75" height=".06" depth=".55"
+         material="color: #c8a848; emissive: #a08828; emissiveIntensity: .5"
+         animation="property: material.emissiveIntensity; from: .35; to: .7; dur: 2800; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+  <a-text id="lbl-file" value="READ" position="0 1.45 0.08" text="color: #806028; width: 2.2; align: center; font: monoid"
+          animation="property: position; from: 0 1.4 0.08; to: 0 1.5 0.08; dur: 2200; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
+  <a-entity light="type: point; color: #e8a030; intensity: .6; distance: 3.5" position="0 1.4 0"></a-entity>
+  <!-- Corner paper stack -->
+  <a-box id="papers1" grabbable="physics:false; immovable:true;"
+         position="2.8 0.09 2.8" width=".52" height=".18" depth=".42"
+         material="color: #c4b890; opacity: .55"
+         animation="property: material.opacity; from: .45; to: .65; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+  <a-text id="lbl-papers" value="?" position="2.8 0.65 2.8" text="color: #605020; width: 1.6; align: center; font: monoid"
+          animation="property: position; from: 2.8 0.6 2.8; to: 2.8 0.7 2.8; dur: 2500; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
+  <a-entity light="type: point; color: #e0a820; intensity: .15; distance: 2" position="2.8 .5 2.8"></a-entity>
 </a-scene>
-
 <script>
-var cluesFound = 0;
-
-function showMsg(speaker, text) {
-  document.getElementById('msg-speaker').textContent = speaker;
-  document.getElementById('msg-text').textContent = text;
-  document.getElementById('msgbox').classList.add('show');
+var read = 0;
+function showMsg(s, t) {
+  document.getElementById('spk').textContent = s;
+  document.getElementById('txt').textContent = t;
+  document.getElementById('msg').classList.add('show');
 }
-
 function closeMsg() {
-  document.getElementById('msgbox').classList.remove('show');
-  if (cluesFound >= 2) {
-    showRiddle();
-  }
+  document.getElementById('msg').classList.remove('show');
+  if (read >= 2) showDecision();
 }
-
-var objectHandlers = {
-  file1: function() {
-    cluesFound++;
-    showMsg('The File',
-      'A literature review is not a summary of everything you\'ve read. It is an argument about the state of a field. It says: here is what exists; here is what it does well; here is what it doesn\'t do, or hasn\'t yet tried; and here is the gap — which my project will address.');
-  },
-  papers1: function() {
-    cluesFound++;
-    showMsg('The Papers',
-      'For each paper, extract five things: What\'s the research question? What\'s the method? What\'s the contribution? What are the limitations? How does it relate to your project? Do this for every paper. By the end, you\'ve almost written your review without realising.');
-  }
-};
-
-var hoveredEl = null;
-
-document.querySelector('a-scene').addEventListener('loaded', function() {
-  document.querySelectorAll('.clickable').forEach(function(el) {
-    el.addEventListener('mouseenter', function() { hoveredEl = el; });
-    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
-  });
-});
-
-function showRiddle() {
-  var box = document.getElementById('riddle-box');
-  document.getElementById('riddle-q').textContent = 'A room full of filing cabinets. Thousands of papers. You\'ve read dozens. What makes the difference between a bibliography and scholarship?';
-  var opts = document.getElementById('riddle-opts');
+function showDecision() {
+  document.getElementById('dq').textContent = 'A room full of filing cabinets. Thousands of papers. You\'ve read dozens. What makes the difference between a bibliography and scholarship?';
+  var opts = document.getElementById('dopts');
   opts.innerHTML = '';
-
-  var choices = [
-    { text: 'A bibliography lists what you read. Scholarship makes an argument about what those things, taken together, leave missing.', correct: true },
-    { text: 'Scholarship is just a bibliography with commentary added to each entry.', correct: false },
-    { text: 'The difference is how many papers you include — more papers means more scholarly.', correct: false }
+  var cs = [
+    {t: 'A bibliography lists what you read. Scholarship makes an argument about what those things, taken together, leave missing.', c: true},
+    {t: 'Scholarship is just a bibliography with commentary added to each entry.', c: false},
+    {t: 'The difference is how many papers you include — more papers means more scholarly.', c: false}
   ];
-
-  choices.forEach(function(c) {
-    var btn = document.createElement('button');
-    btn.textContent = c.text;
-    btn.onclick = function() {
+  cs.forEach(function(o) {
+    var b = document.createElement('button');
+    b.textContent = o.t;
+    if (o.c) b.dataset.correct = 'true';
+    b.onclick = function() {
       var all = opts.querySelectorAll('button');
-      all.forEach(function(b) { b.style.pointerEvents = 'none'; });
-      if (c.correct) {
-        btn.classList.add('correct');
-        document.getElementById('riddle-fb').textContent = 'Yes. The review is selective and purposeful. You include what\'s relevant to your argument and omit what isn\'t, even if you read it. It\'s an argument, not a list.';
-      } else {
-        btn.classList.add('wrong');
-        choices.forEach(function(ch, i) { if (ch.correct) all[i].classList.add('correct'); });
-        document.getElementById('riddle-fb').textContent = 'Not quite. A bibliography says "I read these things." An argument says "these things, taken together, leave this specific opening." The former is a list. The latter is scholarship.';
-      }
-      document.getElementById('riddle-fb').classList.add('show');
+      all.forEach(function(x) { x.style.pointerEvents = 'none'; });
+      b.classList.add(o.c ? 'cor' : 'wrg');
+      if (!o.c) all.forEach(function(x) { if (x.dataset.correct) x.classList.add('cor'); });
+      var fb = document.getElementById('dfb');
+      fb.textContent = o.c
+        ? 'Yes. The review is selective and purposeful. You include what\'s relevant to your argument, not everything you happened to read. It\'s a curated argument about where the field stands — and where it doesn\'t.'
+        : 'Not quite. A bibliography says "I read these things." Scholarship says "these things, taken together, leave this specific opening." The former is a list. The latter is an argument.';
+      fb.classList.add('show');
       setTimeout(function() {
-        box.classList.remove('show');
-        document.getElementById('door-prompt').classList.add('show');
+        document.getElementById('dec').classList.remove('show');
+        document.getElementById('exit').classList.add('show');
       }, 4000);
     };
-    opts.appendChild(btn);
+    opts.appendChild(b);
   });
-
-  box.classList.add('show');
+  document.getElementById('dec').classList.add('show');
 }
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  if (!hoveredEl) return;
-  var fn = objectHandlers[hoveredEl.id];
-  if (!fn || hoveredEl.dataset.done) return;
-  hoveredEl.dataset.done = '1';
-  fn();
+document.getElementById('file1').addEventListener('grab', function(e) {
+  if (this.dataset.done) { e.detail.grabbing.components.grabbing.drop(); return; }
+  this.dataset.done = '1';
+  e.detail.grabbing.components.grabbing.drop();
+  read++;
+  document.getElementById('lbl-file').setAttribute('visible', 'false');
+  showMsg('The File', 'A literature review is not a summary of everything you\'ve read. It is an argument about the state of a field. It says: here is what exists; here is what it does well; here is what it doesn\'t do, or hasn\'t yet tried; and here is the gap — which my project will address.');
+});
+document.getElementById('papers1').addEventListener('grab', function(e) {
+  if (this.dataset.done) { e.detail.grabbing.components.grabbing.drop(); return; }
+  this.dataset.done = '1';
+  e.detail.grabbing.components.grabbing.drop();
+  read++;
+  document.getElementById('lbl-papers').setAttribute('visible', 'false');
+  showMsg('The Papers', 'For each paper, extract five things: What\'s the research question? What\'s the method? What\'s the contribution? What are the limitations? How does it relate to your project? Do this for every paper. By the end, you\'ve almost written your review without realising.');
 });
 </script>
 </body>

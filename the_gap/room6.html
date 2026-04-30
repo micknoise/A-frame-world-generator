@@ -1,185 +1,133 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Room 6 — The Mirror Room</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #msgbox {
-      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
-      background: rgba(5,8,8,0.94); border-top: 1px solid #203535;
-      padding: 24px 32px; box-sizing: border-box;
-      font-family: 'Courier New', monospace; color: #a0c4c4;
-      display: none; max-height: 45vh; overflow-y: auto;
-    }
-    #msgbox.show { display: block; }
-    #msgbox .speaker { font-size: 0.65rem; letter-spacing: 0.2em; color: #508080; text-transform: uppercase; margin-bottom: 8px; }
-    #msgbox .text { font-size: 0.85rem; line-height: 1.8; }
-    #msgbox .dismiss { font-size: 0.65rem; color: #406060; margin-top: 12px; letter-spacing: 0.15em; cursor: pointer; }
-    #msgbox .dismiss:hover { color: #a0c4c4; }
-
-    #door-prompt {
-      position: fixed; top: 20px; right: 20px; z-index: 100;
-      font-family: 'Courier New', monospace; display: none;
-    }
-    #door-prompt.show { display: block; }
-    #door-prompt a {
-      color: #508080; font-size: 0.75rem; letter-spacing: 0.15em;
-      text-decoration: none; border: 1px solid #203535; padding: 10px 20px;
-      transition: all 0.3s;
-    }
-    #door-prompt a:hover { color: #a0c4c4; border-color: #508080; }
-  </style>
+<meta charset="utf-8">
+<title>The Edge — Room 6: The Mirror Room</title>
+<script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+<script>if(window.AFRAME&&AFRAME.components&&AFRAME.components.grabbable)delete AFRAME.components.grabbable;</script>
+<script src="../libs/a-game/a-game.min.js"></script>
+<style>
+body{margin:0;overflow:hidden}
+#msg{position:fixed;bottom:0;left:0;width:100%;z-index:100;background:rgba(4,8,8,.96);border-top:1px solid #104040;padding:28px 44px;box-sizing:border-box;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .3s ease,transform .3s ease;max-height:48vh;overflow-y:auto}
+#msg.show{opacity:1;pointer-events:auto;transform:none}
+#msg .spk{font-size:.52rem;letter-spacing:.38em;color:#307070;text-transform:uppercase;margin-bottom:14px}
+#msg .txt{font-size:.88rem;line-height:2.15;color:#80c0c0;max-width:700px}
+#msg .dis{font-size:.52rem;color:#103030;margin-top:18px;letter-spacing:.28em;cursor:pointer;text-transform:uppercase;display:inline-block;border:1px solid #103838;padding:7px 18px;transition:color .2s,border-color .2s}
+#msg .dis:hover{color:#80c0c0;border-color:#307070}
+#exit{position:fixed;top:22px;right:22px;z-index:100;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .5s ease}
+#exit.show{opacity:1;pointer-events:auto}
+#exit a{color:#307070;font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;text-decoration:none;border:1px solid #104040;padding:10px 22px;display:block;transition:all .3s}
+#exit a:hover{color:#80c0c0;border-color:#307070}
+</style>
 </head>
 <body>
-
-<div id="msgbox">
-  <div class="speaker" id="msg-speaker"></div>
-  <div class="text" id="msg-text"></div>
-  <div class="dismiss" onclick="closeMsg()">[ turn away ]</div>
+<input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true">
+<div id="msg">
+  <div class="spk" id="spk"></div>
+  <div class="txt" id="txt"></div>
+  <div class="dis" onclick="closeMsg()">[ look away ]</div>
 </div>
-
-<div id="door-prompt">
-  <a href="room7.html">Enter the divided room →</a>
-</div>
-
-<a-scene fog="type: exponential; color: #050808; density: 0.04">
-  <a-sky color="#050808"></a-sky>
-  <a-entity light="type: ambient; color: #182828; intensity: 0.3"></a-entity>
-
-  <!-- Camera -->
-  <a-entity position="0 1.6 0">
-    <a-entity camera look-controls wasd-controls="acceleration: 20">
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
-                material="color: #80c0c0; shader: flat; opacity: 0.5"
-                raycaster="objects: .clickable; far: 15"></a-entity>
-    </a-entity>
-  </a-entity>
-
-  <!-- Floor — reflective dark -->
-  <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10"
-           material="color: #080c0c; roughness: 0.2; metalness: 0.4"></a-plane>
-
+<div id="exit"><a href="room7.html">Enter the divided room &#8594;</a></div>
+<a-scene physics="workerUrl: ../libs/a-game/cannonWorker.min.js; gravity: 0 -9.8 0"
+         fog="type: exponential; color: #040808; density: 0.04" loading-screen="enabled: false">
+  <a-player id="player" locomotion grabbing position="0 0 0"></a-player>
+  <a-sky color="#030606"></a-sky>
+  <a-entity light="type: ambient; color: #0a1818; intensity: 0.3"></a-entity>
+  <a-entity light="type: point; color: #208080; intensity: .2; distance: 5" position="0 3.5 0"
+            animation="property: light.intensity; from: .15; to: .28; dur: 2400; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+  <a-entity light="type: point; color: #104040; intensity: .2; distance: 4" position="-4 3.2 -4"></a-entity>
+  <a-entity light="type: point; color: #104040; intensity: .2; distance: 4" position=" 4 3.2 -4"></a-entity>
+  <a-entity light="type: point; color: #104040; intensity: .15; distance: 4" position="-4 3.2  4"></a-entity>
+  <a-entity light="type: point; color: #104040; intensity: .15; distance: 4" position=" 4 3.2  4"></a-entity>
+  <!-- Floor — dark reflective -->
+  <a-box floor position="0 -0.05 0" width="11" height="0.1" depth="11"
+         material="color: #080c0c; roughness: .12; metalness: .55"></a-box>
   <!-- Ceiling -->
-  <a-plane position="0 4 0" rotation="90 0 0" width="10" height="10"
-           material="color: #040606"></a-plane>
-
+  <a-plane position="0 4 0" rotation="90 0 0" width="11" height="11"
+           material="color: #040808; roughness: .08; metalness: .4"></a-plane>
   <!-- Walls -->
-  <a-box position="-5 2 0" width="0.1" height="4" depth="10" material="color: #0a1010"></a-box>
-  <a-box position="5 2 0" width="0.1" height="4" depth="10" material="color: #0a1010"></a-box>
-  <a-box position="0 2 -5" width="10" height="4" depth="0.1" material="color: #0a1010"></a-box>
-  <a-box position="0 2 5" width="10" height="4" depth="0.1" material="color: #0a1010"></a-box>
-
-  <!-- Room title floating -->
-  <a-text value="THINGS THAT LOOK LIKE GAPS\nBUT AREN'T" position="0 3.3 0"
-          text="color: #305050; width: 6; align: center; font: monoid"
-          rotation="0 0 0"></a-text>
-
-  <!-- Central light -->
-  <a-entity light="type: point; color: #60c0c0; intensity: 0.3; distance: 6" position="0 3 0"></a-entity>
-
-  <!-- MIRROR 1: "Nobody has done my exact project" — front wall -->
-  <a-entity position="0 1.8 -4.8">
-    <a-plane width="2" height="1.5" material="color: #203840; roughness: 0.1; metalness: 0.8"></a-plane>
+  <a-box wall position="-5.5 2 0"  width=".14" height="4" depth="11.3" material="color: #0a1414; roughness: .7"></a-box>
+  <a-box wall position=" 5.5 2 0"  width=".14" height="4" depth="11.3" material="color: #0a1414; roughness: .7"></a-box>
+  <a-box wall position="0 2 -5.5"  width="11.3" height="4" depth=".14" material="color: #0a1414; roughness: .7"></a-box>
+  <a-box wall position="0 2  5.5"  width="11.3" height="4" depth=".14" material="color: #0a1414; roughness: .7"></a-box>
+  <!-- MIRROR 1 — front wall (facing player entry) -->
+  <a-entity id="mg1" position="0 2 -5.4">
     <!-- Frame -->
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 -0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="-1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="1.04 0 0" material="color: #2a3a3a"></a-box>
-    <!-- Text on mirror -->
-    <a-text value='"Nobody has done\nmy exact project"' position="0 0 0.05"
-            text="color: #80c0c0; width: 3; align: center; font: monoid; opacity: 0.7"></a-text>
-    <a-box class="clickable" id="mirror1" width="2" height="1.5" depth="0.1" position="0 0 0.05"
-           material="opacity: 0; transparent: true"></a-box>
-    <a-entity light="type: spot; color: #60c0c0; intensity: 0.4; angle: 30; distance: 3" position="0 1.5 1" rotation="-50 0 0"></a-entity>
+    <a-box width="2.5" height="3.2" depth=".05" material="color: #0c1a1a; metalness: .3; roughness: .6"></a-box>
+    <!-- Mirror surface -->
+    <a-box id="mirror1" grabbable="physics:false; immovable:true;"
+           position="0 0 .05" width="2.1" height="2.7" depth=".03"
+           material="color: #a0c8c8; metalness: .85; roughness: .08; opacity: .7"
+           animation="property: material.opacity; from: .55; to: .75; dur: 3200; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <!-- False statement etched in mirror -->
+    <a-text value="&#34;A literature review proves you read a lot.&#34;"
+            position="0 -1.1 .12" text="color: #206060; width: 2.8; align: center; font: monoid; wrapCount: 28"></a-text>
+    <a-entity light="type: point; color: #208080; intensity: .25; distance: 2.5" position="0 1.6 .3"></a-entity>
   </a-entity>
-
-  <!-- MIRROR 2: "I couldn't find any papers" — right wall -->
-  <a-entity position="4.8 1.8 0" rotation="0 -90 0">
-    <a-plane width="2" height="1.5" material="color: #203840; roughness: 0.1; metalness: 0.8"></a-plane>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 -0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="-1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-text value='"I couldn\'t find\nany papers"' position="0 0 0.05"
-            text="color: #80c0c0; width: 3; align: center; font: monoid; opacity: 0.7"></a-text>
-    <a-box class="clickable" id="mirror2" width="2" height="1.5" depth="0.1" position="0 0 0.05"
-           material="opacity: 0; transparent: true"></a-box>
-    <a-entity light="type: spot; color: #60c0c0; intensity: 0.4; angle: 30; distance: 3" position="0 1.5 1" rotation="-50 0 0"></a-entity>
+  <!-- MIRROR 2 — right wall -->
+  <a-entity id="mg2" position="5.4 2 0" rotation="0 -90 0">
+    <a-box width="2.5" height="3.2" depth=".05" material="color: #0c1a1a; metalness: .3; roughness: .6"></a-box>
+    <a-box id="mirror2" grabbable="physics:false; immovable:true;"
+           position="0 0 .05" width="2.1" height="2.7" depth=".03"
+           material="color: #a0c8c8; metalness: .85; roughness: .08; opacity: .7"
+           animation="property: material.opacity; from: .5; to: .72; dur: 2800; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="&#34;The gap is just the last paragraph of the introduction.&#34;"
+            position="0 -1.1 .12" text="color: #206060; width: 2.8; align: center; font: monoid; wrapCount: 28"></a-text>
+    <a-entity light="type: point; color: #208080; intensity: .25; distance: 2.5" position="0 1.6 .3"></a-entity>
   </a-entity>
-
-  <!-- MIRROR 3: "This tech is new so everything is a gap" — back wall -->
-  <a-entity position="0 1.8 4.8" rotation="0 180 0">
-    <a-plane width="2" height="1.5" material="color: #203840; roughness: 0.1; metalness: 0.8"></a-plane>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 -0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="-1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-text value='"This tech is new\nso everything is a gap"' position="0 0 0.05"
-            text="color: #80c0c0; width: 3; align: center; font: monoid; opacity: 0.7"></a-text>
-    <a-box class="clickable" id="mirror3" width="2" height="1.5" depth="0.1" position="0 0 0.05"
-           material="opacity: 0; transparent: true"></a-box>
-    <a-entity light="type: spot; color: #60c0c0; intensity: 0.4; angle: 30; distance: 3" position="0 1.5 1" rotation="-50 0 0"></a-entity>
+  <!-- MIRROR 3 — back wall -->
+  <a-entity id="mg3" position="0 2 5.4" rotation="0 180 0">
+    <a-box width="2.5" height="3.2" depth=".05" material="color: #0c1a1a; metalness: .3; roughness: .6"></a-box>
+    <a-box id="mirror3" grabbable="physics:false; immovable:true;"
+           position="0 0 .05" width="2.1" height="2.7" depth=".03"
+           material="color: #a0c8c8; metalness: .85; roughness: .08; opacity: .7"
+           animation="property: material.opacity; from: .6; to: .78; dur: 3600; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="&#34;Novel means no one has done it before. That&#39;s enough.&#34;"
+            position="0 -1.1 .12" text="color: #206060; width: 2.8; align: center; font: monoid; wrapCount: 28"></a-text>
+    <a-entity light="type: point; color: #208080; intensity: .25; distance: 2.5" position="0 1.6 .3"></a-entity>
   </a-entity>
-
-  <!-- MIRROR 4: "I'm interdisciplinary so I don't fit" — left wall -->
-  <a-entity position="-4.8 1.8 0" rotation="0 90 0">
-    <a-plane width="2" height="1.5" material="color: #203840; roughness: 0.1; metalness: 0.8"></a-plane>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="2.15" height="0.08" depth="0.05" position="0 -0.79 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="-1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-box width="0.08" height="1.5" depth="0.05" position="1.04 0 0" material="color: #2a3a3a"></a-box>
-    <a-text value='"I\'m interdisciplinary\nso I don\'t fit any field"' position="0 0 0.05"
-            text="color: #80c0c0; width: 3; align: center; font: monoid; opacity: 0.7"></a-text>
-    <a-box class="clickable" id="mirror4" width="2" height="1.5" depth="0.1" position="0 0 0.05"
-           material="opacity: 0; transparent: true"></a-box>
-    <a-entity light="type: spot; color: #60c0c0; intensity: 0.4; angle: 30; distance: 3" position="0 1.5 1" rotation="-50 0 0"></a-entity>
+  <!-- MIRROR 4 — left wall -->
+  <a-entity id="mg4" position="-5.4 2 0" rotation="0 90 0">
+    <a-box width="2.5" height="3.2" depth=".05" material="color: #0c1a1a; metalness: .3; roughness: .6"></a-box>
+    <a-box id="mirror4" grabbable="physics:false; immovable:true;"
+           position="0 0 .05" width="2.1" height="2.7" depth=".03"
+           material="color: #a0c8c8; metalness: .85; roughness: .08; opacity: .7"
+           animation="property: material.opacity; from: .52; to: .76; dur: 3000; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="&#34;You write the lit review after the project is done.&#34;"
+            position="0 -1.1 .12" text="color: #206060; width: 2.8; align: center; font: monoid; wrapCount: 28"></a-text>
+    <a-entity light="type: point; color: #208080; intensity: .25; distance: 2.5" position="0 1.6 .3"></a-entity>
   </a-entity>
-
 </a-scene>
-
 <script>
 var seen = 0;
+var total = 4;
 var mirrorData = {
-  mirror1: { speaker: 'False Gap #1', text: '"Nobody has done my exact project." That\'s not a gap. That\'s a description of all possible projects. Of course nobody has done your exact thing — that\'s trivially true. A gap requires you to say what specific absence in the field\'s knowledge your project addresses.' },
-  mirror2: { speaker: 'False Gap #2', text: '"I couldn\'t find any papers on my topic." That might mean there\'s a gap, or it might mean you searched badly. If an entire field seems to be missing, you\'re probably looking in the wrong place — or your topic needs reframing.' },
-  mirror3: { speaker: 'False Gap #3', text: '"This technology is new, so everything about it is a gap." New technologies still exist within existing conversations. Diffusion models are new, but generative art is sixty years old. The gap is not "use a new tool" — it\'s "use a new tool to do something the old tools couldn\'t, and explain what that reveals."' },
-  mirror4: { speaker: 'False Gap #4', text: '"My project is interdisciplinary, so it doesn\'t fit any field." Interdisciplinary work sits at the intersection of multiple fields. You still need to know those fields. Being between fields is not the same as being outside them. It\'s harder, not easier.' }
+  mirror1: ['"A literature review proves you read a lot."', 'False. The review proves you read the right things and understood their relationship to each other and to your question. A list of sources is not a review. An argument about the field — illustrated by sources — is.'],
+  mirror2: ['"The gap is just the last paragraph of the introduction."', 'False. The gap is the argument that everything else serves. The introduction narrows towards it. The literature review establishes it. The methodology responds to it. It\'s not a paragraph — it\'s the architecture.'],
+  mirror3: ['"Novel means no one has done it before. That\'s enough."', 'False. Novelty is necessary but not sufficient. The question is: why does the absence matter? What have we failed to understand, make, or test because of it? The gap must have stakes, not just coordinates.'],
+  mirror4: ['"You write the lit review after the project is done."', 'False. The review shapes the project. It tells you what method to use, what questions are already answered, what your contribution can realistically be. Write it first — even if you revise it later. It is not decoration. It is architecture.']
 };
-
-function showMsg(speaker, text) {
-  document.getElementById('msg-speaker').textContent = speaker;
-  document.getElementById('msg-text').textContent = text;
-  document.getElementById('msgbox').classList.add('show');
+function showMsg(s, t) {
+  document.getElementById('spk').textContent = s;
+  document.getElementById('txt').textContent = t;
+  document.getElementById('msg').classList.add('show');
 }
-
 function closeMsg() {
-  document.getElementById('msgbox').classList.remove('show');
-  if (seen >= 4) {
-    document.getElementById('door-prompt').classList.add('show');
-  }
+  document.getElementById('msg').classList.remove('show');
+  if (seen >= total) document.getElementById('exit').classList.add('show');
 }
-
-var hoveredEl = null;
-
-document.querySelector('a-scene').addEventListener('loaded', function() {
-  document.querySelectorAll('.clickable').forEach(function(el) {
-    el.addEventListener('mouseenter', function() { hoveredEl = el; });
-    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
+Object.keys(mirrorData).forEach(function(id) {
+  document.getElementById(id).addEventListener('grab', function(e) {
+    if (this.dataset.done) { e.detail.grabbing.components.grabbing.drop(); return; }
+    this.dataset.done = '1';
+    e.detail.grabbing.components.grabbing.drop();
+    seen++;
+    // Crack the false statement — dim the mirror
+    this.setAttribute('animation', 'property: material.opacity; from: .7; to: .2; dur: 1200; easing: easeOutQuad');
+    this.setAttribute('material', 'emissive: #ff0000; emissiveIntensity: 0');
+    // Get parent mirror group's text and cross it out
+    showMsg(mirrorData[id][0], mirrorData[id][1]);
   });
-});
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  if (!hoveredEl) return;
-  var d = mirrorData[hoveredEl.id];
-  if (!d || hoveredEl.dataset.done) return;
-  hoveredEl.dataset.done = '1';
-  seen++;
-  showMsg(d.speaker, d.text);
 });
 </script>
 </body>

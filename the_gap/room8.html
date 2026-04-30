@@ -1,168 +1,172 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Room 8 — The Edge</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #final-text {
-      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
-      background: rgba(0,0,0,0.85); border-top: 1px solid #333;
-      padding: 28px 32px; box-sizing: border-box;
-      font-family: 'Courier New', monospace; color: #c0c0c0;
-      display: none; max-height: 55vh; overflow-y: auto;
-    }
-    #final-text.show { display: block; }
-    #final-text .title { font-size: 0.65rem; letter-spacing: 0.25em; color: #606060; text-transform: uppercase; margin-bottom: 12px; }
-    #final-text .body { font-size: 0.85rem; line-height: 1.9; color: #b0b0b0; margin-bottom: 16px; }
-    #final-text .body strong { color: #e0e0e0; }
-    #final-text .prompt { font-size: 0.8rem; line-height: 1.8; color: #808080; border-top: 1px solid #2a2a2a; padding-top: 16px; }
-
-    #begin {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: #000; z-index: 9999;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-family: 'Courier New', monospace; color: #808080; cursor: pointer;
-    }
-    #begin.gone { display: none; }
-    #begin .line { font-size: 0.85rem; line-height: 2; text-align: center; max-width: 500px; }
-    #begin .enter { font-size: 0.7rem; letter-spacing: 0.3em; color: #505050; margin-top: 2em; animation: p 2s ease infinite; }
-    @keyframes p { 0%,100%{opacity:0.3} 50%{opacity:1} }
-  </style>
+<meta charset="utf-8">
+<title>The Edge — Room 8: The Edge</title>
+<script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+<script>if(window.AFRAME&&AFRAME.components&&AFRAME.components.grabbable)delete AFRAME.components.grabbable;</script>
+<script src="../libs/a-game/a-game.min.js"></script>
+<style>
+body{margin:0;overflow:hidden;background:#000}
+/* Intro overlay */
+#intro{position:fixed;inset:0;z-index:300;background:#000;display:flex;align-items:center;justify-content:center;transition:opacity 1.2s ease;cursor:pointer}
+#intro.fade{opacity:0;pointer-events:none}
+#intro-inner{font-family:'Courier New',monospace;max-width:520px;width:90%;padding:40px 0}
+#intro-inner .line{font-size:.84rem;line-height:2.8;color:#2a2a3a;letter-spacing:.06em;display:block;margin-bottom:.2em}
+#intro-inner .line.lit{color:#9090b8;animation:fadein 1.2s ease forwards}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#intro-inner .prompt{font-size:.52rem;color:#1a1a2a;margin-top:2.5em;letter-spacing:.38em;text-transform:uppercase;text-align:center}
+/* Final panel */
+#final{position:fixed;inset:0;z-index:200;background:rgba(1,1,4,.97);overflow-y:auto;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .8s ease;padding:10vh 0;box-sizing:border-box}
+#final.show{opacity:1;pointer-events:auto}
+#final-inner{max-width:620px;margin:0 auto;padding:0 32px}
+#final-inner h2{font-size:.65rem;letter-spacing:.45em;color:#303050;text-transform:uppercase;margin:0 0 3em 0;font-weight:normal}
+#final-inner .sec{margin-bottom:2.8em}
+#final-inner .sec-head{font-size:.52rem;letter-spacing:.38em;color:#404070;text-transform:uppercase;margin-bottom:1.1em;border-bottom:1px solid #181830;padding-bottom:.7em}
+#final-inner .sec-body{font-size:.82rem;line-height:2.4;color:#8888b0}
+#final-inner .sec-body strong{color:#a0a0cc;font-weight:normal}
+#final-inner .gap-box{border:1px solid #1c1c38;padding:20px 24px;margin-top:1.6em}
+#final-inner .gap-box p{margin:0 0 1em 0;font-size:.8rem;line-height:2.2;color:#7878a8}
+#final-inner .gap-box p:last-child{margin:0}
+#final-inner .tasks{margin-top:.8em}
+#final-inner .task{font-size:.75rem;line-height:2;color:#7878a8;padding:10px 0;border-bottom:1px solid #101025;display:flex;align-items:flex-start;gap:14px}
+#final-inner .task:last-child{border:none}
+#final-inner .task .n{color:#303058;min-width:1.4em;flex-shrink:0}
+#final-inner .close-prompt{font-size:.52rem;color:#202040;letter-spacing:.32em;text-transform:uppercase;text-align:center;margin-top:3.5em;padding-bottom:2em}
+</style>
 </head>
 <body>
-
-<div id="begin" onclick="this.classList.add('gone')">
-  <div class="line">
-    You've walked through seven rooms.<br>
-    You've heard the voices. Seen the absences.<br>
-    Learned to tell the real gaps from the false ones.<br><br>
-    Now step outside.
+<input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true">
+<!-- Intro overlay -->
+<div id="intro" onclick="dismissIntro()">
+  <div id="intro-inner">
+    <span class="line" id="il1">You've walked through seven rooms.</span>
+    <span class="line" id="il2">You've read the files, answered the phones.</span>
+    <span class="line" id="il3">You've knocked on doors and examined the pedestals.</span>
+    <span class="line" id="il4">You've stood in front of the mirrors and seen the lies.</span>
+    <span class="line" id="il5">You've crossed the line between technical and artistic.</span>
+    <span class="line" id="il6" style="margin-top:1.4em;color:#181828">There is one more thing to do.</span>
+    <div class="prompt" style="margin-top:3em">[ click to continue ]</div>
   </div>
-  <div class="enter">[ click to continue ]</div>
 </div>
-
-<div id="final-text">
-  <div class="title">The Edge</div>
-  <div class="body" id="final-body"></div>
-  <div class="prompt" id="final-prompt"></div>
+<!-- Final panel -->
+<div id="final">
+  <div id="final-inner">
+    <h2>The Research Gap</h2>
+    <div class="sec">
+      <div class="sec-head">What is it</div>
+      <div class="sec-body">
+        A research gap is <strong>a specific absence in the existing literature</strong> — something that hasn't been studied, built, tested, or critically examined — that your project addresses. It is not a complaint that people haven't done your exact project. It is an argument: here is what exists; here is what it doesn't do; here is what that costs; here is what my work adds.
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-head">The gap statement structure</div>
+      <div class="gap-box">
+        <p>While <strong>[existing work]</strong> has established <strong>[what is known]</strong>,</p>
+        <p>it has not addressed <strong>[the specific absence]</strong>.</p>
+        <p>This matters because <strong>[the stakes — what the absence costs]</strong>.</p>
+        <p>My project addresses this gap by <strong>[your approach and contribution]</strong>.</p>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-head">The six gap types</div>
+      <div class="sec-body">
+        <strong>Method</strong> — the technique hasn't been tried for this problem.<br>
+        <strong>Application</strong> — the method hasn't been applied in this context.<br>
+        <strong>Knowledge</strong> — the question simply hasn't been asked or answered.<br>
+        <strong>Scale</strong> — findings haven't been tested at this scale or in this population.<br>
+        <strong>Critical</strong> — an embedded assumption hasn't been examined or challenged.<br>
+        <strong>Audience</strong> — the work hasn't reached, or been designed for, this group of people.
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-head">This week's tasks</div>
+      <div class="tasks">
+        <div class="task"><span class="n">1.</span><span>Write a one-paragraph description of your project. Don't mention your gap yet — just describe what you're making and why.</span></div>
+        <div class="task"><span class="n">2.</span><span>Find three papers that relate to your project. For each: what's the question, the method, the contribution, the limitation?</span></div>
+        <div class="task"><span class="n">3.</span><span>Identify one thing each paper doesn't do that yours will. That's the beginning of your gap.</span></div>
+        <div class="task"><span class="n">4.</span><span>Write a gap statement using the structure above. It will be rough. That's fine. Bring it to the next session.</span></div>
+        <div class="task"><span class="n">5.</span><span>Ask yourself: what type of gap is mine? Method, application, knowledge, scale, critical, or audience? Be specific. If it's more than one, say which is primary.</span></div>
+      </div>
+    </div>
+    <div class="close-prompt">You're standing at the edge. Now you know what you're looking for.<br>The gap is the work.</div>
+  </div>
 </div>
-
-<a-scene fog="type: exponential; color: #020204; density: 0.008">
-  <a-sky color="#020204"></a-sky>
-  <a-entity light="type: ambient; color: #101018; intensity: 0.25"></a-entity>
-
-  <!-- Camera — starting indoors, facing the door -->
-  <a-entity position="0 1.6 4">
-    <a-entity camera look-controls wasd-controls="acceleration: 20">
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
-                material="color: #a0a0a0; shader: flat; opacity: 0.4"
-                raycaster="objects: .clickable; far: 20"></a-entity>
-    </a-entity>
-  </a-entity>
-
-  <!-- Small vestibule behind you -->
-  <a-plane position="0 0 4" rotation="-90 0 0" width="4" height="4"
-           material="color: #0a0a0c; roughness: 0.9"></a-plane>
-  <a-box position="-2 1.5 4" width="0.1" height="3" depth="4" material="color: #0d0d10"></a-box>
-  <a-box position="2 1.5 4" width="0.1" height="3" depth="4" material="color: #0d0d10"></a-box>
-  <a-box position="0 1.5 6" width="4" height="3" depth="0.1" material="color: #0d0d10"></a-box>
-  <a-plane position="0 3 4" rotation="90 0 0" width="4" height="4" material="color: #060608"></a-plane>
-  <a-entity light="type: point; color: #c0c0d0; intensity: 0.3; distance: 5" position="0 2.5 4"></a-entity>
-
-  <!-- THE EDGE — ground extends forward then stops abruptly -->
-  <a-plane position="0 0 -4" rotation="-90 0 0" width="60" height="12"
-           material="color: #0c0c0e; roughness: 0.7; metalness: 0.15"></a-plane>
-
-  <!-- Edge line — the actual cliff edge at z = -10 -->
-  <a-plane position="0 0.01 -10" rotation="-90 0 0" width="60" height="0.08"
-           material="color: #c0c0c0; emissive: #808080; emissiveIntensity: 0.5"></a-plane>
-
-  <!-- Beyond the edge: NOTHING. Just void and distant lights -->
-
-  <!-- Distant stars / points of light in the void — suggest infinity -->
-  <a-sphere position="-8 -2 -25" radius="0.04" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.8"></a-sphere>
-  <a-sphere position="12 -5 -40" radius="0.05" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.6"></a-sphere>
-  <a-sphere position="-15 -8 -55" radius="0.06" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.5"></a-sphere>
-  <a-sphere position="5 -3 -35" radius="0.03" material="color: #ffe0c0; emissive: #ffc080; emissiveIntensity: 0.7"></a-sphere>
-  <a-sphere position="-3 -6 -45" radius="0.04" material="color: #e0ffe0; emissive: #80ff80; emissiveIntensity: 0.5"></a-sphere>
-  <a-sphere position="20 -10 -60" radius="0.07" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.4"></a-sphere>
-  <a-sphere position="-20 -4 -30" radius="0.03" material="color: #ffe0e0; emissive: #ffc0c0; emissiveIntensity: 0.6"></a-sphere>
-  <a-sphere position="8 -12 -70" radius="0.08" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.3"></a-sphere>
-  <a-sphere position="-12 -15 -80" radius="0.1" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.2"></a-sphere>
-  <a-sphere position="0 -1 -20" radius="0.03" material="color: #ffe0c0; emissive: #ffc080; emissiveIntensity: 0.8"></a-sphere>
-  <a-sphere position="15 -7 -50" radius="0.05" material="color: #c0e0ff; emissive: #80c0ff; emissiveIntensity: 0.5"></a-sphere>
-  <a-sphere position="-25 -3 -35" radius="0.04" material="color: #e0e0ff; emissive: #a0a0ff; emissiveIntensity: 0.5"></a-sphere>
-
-  <!-- Gentle animation on some -->
-  <a-sphere position="3 -4 -30" radius="0.03" material="color: #e0e0ff; emissive: #c0c0ff; emissiveIntensity: 0.6"
-            animation="property: position; to: 3.5 -3.5 -31; dur: 12000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
-  <a-sphere position="-6 -2 -22" radius="0.025" material="color: #ffe0c0; emissive: #ffc080; emissiveIntensity: 0.7"
-            animation="property: position; to: -5.5 -2.5 -23; dur: 9000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
-
-  <!-- Text floating near the edge -->
-  <a-text value="THE EDGE" position="0 2.5 -9"
-          text="color: #505060; width: 12; align: center; font: monoid; letterSpacing: 12"></a-text>
-
-  <!-- Clickable marker at the edge itself -->
-  <a-entity position="0 0 -9">
-    <a-box class="clickable" id="edge-marker" position="0 0.4 0" width="1" height="0.8" depth="1"
-           material="opacity: 0; transparent: true"></a-box>
-    <a-text value="Stand here.\nLook out.\nClick." position="0 1.2 0"
-            text="color: #606070; width: 3; align: center; font: monoid"
-            animation="property: position; from: 0 1.15 0; to: 0 1.25 0; dur: 3000; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
-    <a-entity light="type: point; color: #8080a0; intensity: 0.2; distance: 4" position="0 1 0"></a-entity>
-  </a-entity>
-
-  <!-- Faint ground markings leading to edge -->
-  <a-plane position="0 0.005 0" rotation="-90 0 0" width="0.03" height="8"
-           material="color: #404050; emissive: #303040; emissiveIntensity: 0.2"></a-plane>
-
-  <!-- Wind sound suggestion — distant subtle light flickers -->
-  <a-entity light="type: point; color: #4040a0; intensity: 0.1; distance: 20" position="0 -5 -40"
-            animation="property: light.intensity; from: 0.05; to: 0.15; dur: 5000; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
-
+<a-scene physics="workerUrl: ../libs/a-game/cannonWorker.min.js; gravity: 0 -9.8 0"
+         fog="type: exponential; color: #01010a; density: 0.006" loading-screen="enabled: false">
+  <a-player id="player" locomotion grabbing position="0 0 4"></a-player>
+  <a-sky color="#000103"></a-sky>
+  <a-entity light="type: ambient; color: #05050a; intensity: 0.2"></a-entity>
+  <!-- Vestibule light (warm, behind player) -->
+  <a-entity light="type: point; color: #201818; intensity: .35; distance: 6" position="0 2.5 3"
+            animation="property: light.intensity; from: .25; to: .42; dur: 2800; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+  <!-- Edge light (cold, ahead) -->
+  <a-entity light="type: point; color: #080828; intensity: .2; distance: 8" position="0 1.8 -8"></a-entity>
+  <!-- Void light (very faint blue-purple) -->
+  <a-entity light="type: directional; color: #050515; intensity: .1" position="0 -1 -1"></a-entity>
+  <!-- Vestibule floor -->
+  <a-box floor position="0 -0.05 2" width="5" height="0.1" depth="6" material="color: #08080e; roughness: .9"></a-box>
+  <!-- Ground plane extending to cliff edge -->
+  <a-box floor position="0 -0.05 -3" width="5" height="0.1" depth="8" material="color: #05050c; roughness: .95"></a-box>
+  <!-- Vestibule walls -->
+  <a-box wall position="-2.5 2 2" width=".14" height="4" depth="6.3" material="color: #0e0c10; roughness: .9"></a-box>
+  <a-box wall position=" 2.5 2 2" width=".14" height="4" depth="6.3" material="color: #0e0c10; roughness: .9"></a-box>
+  <a-box wall position="0 2 5.5" width="5.3" height="4" depth=".14"  material="color: #0e0c10; roughness: .9"></a-box>
+  <!-- Vestibule ceiling -->
+  <a-box position="0 4 2" width="5" height=".12" depth="6" material="color: #060408; roughness: .9"></a-box>
+  <!-- Door arch opening (gap in front wall) -->
+  <!-- Short side walls narrowing to void -->
+  <a-box wall position="-2.5 1 -3" width=".14" height="2" depth="8" material="color: #0a0810; roughness: .9; opacity: .6"></a-box>
+  <a-box wall position=" 2.5 1 -3" width=".14" height="2" depth="8" material="color: #0a0810; roughness: .9; opacity: .6"></a-box>
+  <!-- Cliff edge indicator -->
+  <a-box position="0 -0.04 -7" width="5" height=".02" depth=".08"
+         material="color: #302848; emissive: #181430; emissiveIntensity: .5"
+         animation="property: material.emissiveIntensity; from: .3; to: .7; dur: 2200; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+  <!-- Void stars — scattered floating spheres -->
+  <a-sphere position="-8 -2 -18"  radius=".06" material="color: #fff; emissive: #fff; emissiveIntensity: .6" animation="property: position; from: -8 -2 -18; to: -7.8 -1.6 -18; dur: 8000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position=" 6 -4 -22"  radius=".04" material="color: #e0e8ff; emissive: #e0e8ff; emissiveIntensity: .5" animation="property: position; from: 6 -4 -22; to: 6.3 -3.5 -22; dur: 11000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="-3  2 -30"  radius=".07" material="color: #d0d8ff; emissive: #d0d8ff; emissiveIntensity: .45" animation="property: position; from: -3 2 -30; to: -2.6 2.5 -30; dur: 14000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="10 -6 -25"  radius=".05" material="color: #e8e0ff; emissive: #e8e0ff; emissiveIntensity: .5" animation="property: position; from: 10 -6 -25; to: 10.4 -5.5 -25; dur: 9500; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="-12 0 -20"  radius=".06" material="color: #fff; emissive: #fff; emissiveIntensity: .55" animation="property: position; from: -12 0 -20; to: -11.6 .5 -20; dur: 12500; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position=" 2 -8 -35"  radius=".09" material="color: #c8d0ff; emissive: #c8d0ff; emissiveIntensity: .4" animation="property: position; from: 2 -8 -35; to: 2.5 -7.4 -35; dur: 16000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="-5 -10 -28" radius=".05" material="color: #fff; emissive: #fff; emissiveIntensity: .5" animation="property: position; from: -5 -10 -28; to: -4.7 -9.5 -28; dur: 10500; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position=" 15 2 -32"  radius=".07" material="color: #e0e8ff; emissive: #e0e8ff; emissiveIntensity: .45" animation="property: position; from: 15 2 -32; to: 15.4 2.6 -32; dur: 13000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="-9 4 -40"   radius=".1"  material="color: #d8d0ff; emissive: #d8d0ff; emissiveIntensity: .35" animation="property: position; from: -9 4 -40; to: -8.5 4.6 -40; dur: 18000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position=" 4 -3 -15"  radius=".04" material="color: #fff; emissive: #fff; emissiveIntensity: .6" animation="property: position; from: 4 -3 -15; to: 4.3 -2.6 -15; dur: 7000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position="-1 -5 -42"  radius=".08" material="color: #e8e0ff; emissive: #e8e0ff; emissiveIntensity: .4" animation="property: position; from: -1 -5 -42; to: -.6 -4.4 -42; dur: 20000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <a-sphere position=" 8 6 -38"   radius=".06" material="color: #d0e0ff; emissive: #d0e0ff; emissiveIntensity: .45" animation="property: position; from: 8 6 -38; to: 8.4 6.5 -38; dur: 15000; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+  <!-- Edge marker — the one thing to grab -->
+  <a-box id="edge-marker" grabbable="physics:false; immovable:true;"
+         position="0 .4 -9" width="1.2" height=".8" depth=".3"
+         material="color: #080818; opacity: 0; transparent: true"></a-box>
+  <!-- Edge text -->
+  <a-text value="stand here" position="0 1.05 -8.9"
+          text="color: #1c1c38; width: 2.8; align: center; font: monoid"
+          animation="property: material.opacity; from: .3; to: .7; dur: 3500; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
+  <a-entity light="type: point; color: #1818a0; intensity: .18; distance: 4" position="0 1.5 -9"></a-entity>
 </a-scene>
-
 <script>
-var edgeClicked = false;
-
-function handleEdge(el) {
-  if (edgeClicked) return;
-  edgeClicked = true;
-  el.parentElement.querySelector('a-text').setAttribute('visible', false);
-  var panel = document.getElementById('final-text');
-  document.getElementById('final-body').innerHTML =
-    'You\'re standing at the edge. Behind you: everything the field has done. Every paper written, every artwork made, every experiment run, every assumption taken for granted.<br><br>' +
-    'In front of you: everything it hasn\'t.<br><br>' +
-    'A gap is not just "nobody has done my project." A gap is a <strong>meaningful absence</strong> — something the field needs, or would benefit from, that doesn\'t yet exist.<br><br>' +
-    'Your gap statement has three parts:<br><br>' +
-    '<strong>1. What exists</strong> — what is the state of the field?<br>' +
-    '<strong>2. What is missing</strong> — what gap does your project address?<br>' +
-    '<strong>3. Why it matters</strong> — what does the field gain?<br><br>' +
-    'This is where your research lives. Not behind you in the known. Out there, in the dark, where nobody has been yet.';
-  document.getElementById('final-prompt').innerHTML =
-    'For this week: build your reading list. Find at least 5 core papers or works. Extract the five questions for each (question, method, contribution, limitations, relation to your project). Draft a gap statement using the three-part structure above. It doesn\'t need to be final. It needs to exist.<br><br>' +
-    '<em>Next week: choosing and designing methods. Once you have a gap, you need a way to investigate it.</em>';
-  panel.classList.add('show');
-}
-
-var hoveredEl = null;
-
-document.querySelector('a-scene').addEventListener('loaded', function() {
-  document.querySelectorAll('.clickable').forEach(function(el) {
-    el.addEventListener('mouseenter', function() { hoveredEl = el; });
-    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
-  });
+// Stagger intro lines
+var lines = ['il1','il2','il3','il4','il5','il6'];
+lines.forEach(function(id, i) {
+  setTimeout(function() {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('lit');
+  }, 800 + i * 900);
 });
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  if (!hoveredEl) return;
-  if (hoveredEl.id === 'edge-marker') handleEdge(hoveredEl);
+function dismissIntro() {
+  document.getElementById('intro').classList.add('fade');
+}
+document.getElementById('edge-marker').addEventListener('grab', function(e) {
+  if (this.dataset.done) { e.detail.grabbing.components.grabbing.drop(); return; }
+  this.dataset.done = '1';
+  e.detail.grabbing.components.grabbing.drop();
+  // Make sure intro is gone
+  document.getElementById('intro').classList.add('fade');
+  // Show final panel after a breath
+  setTimeout(function() {
+    document.getElementById('final').classList.add('show');
+  }, 600);
 });
 </script>
 </body>

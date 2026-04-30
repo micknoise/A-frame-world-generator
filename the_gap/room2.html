@@ -1,263 +1,170 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Room 2 — The Corridor</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #msgbox {
-      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
-      background: rgba(5,5,10,0.94); border-top: 1px solid #2a2a40;
-      padding: 24px 32px; box-sizing: border-box;
-      font-family: 'Courier New', monospace; color: #a0a0c4;
-      display: none; max-height: 45vh; overflow-y: auto;
-    }
-    #msgbox.show { display: block; }
-    #msgbox .speaker { font-size: 0.65rem; letter-spacing: 0.2em; color: #5050a0; text-transform: uppercase; margin-bottom: 8px; }
-    #msgbox .text { font-size: 0.85rem; line-height: 1.8; }
-    #msgbox .dismiss { font-size: 0.65rem; color: #404060; margin-top: 12px; letter-spacing: 0.15em; cursor: pointer; }
-    #msgbox .dismiss:hover { color: #a0a0c4; }
-
-    #door-prompt {
-      position: fixed; top: 20px; right: 20px; z-index: 100;
-      font-family: 'Courier New', monospace; display: none;
-    }
-    #door-prompt.show { display: block; }
-    #door-prompt a {
-      color: #5050a0; font-size: 0.75rem; letter-spacing: 0.15em;
-      text-decoration: none; border: 1px solid #2a2a40; padding: 10px 20px;
-      transition: all 0.3s;
-    }
-    #door-prompt a:hover { color: #a0a0c4; border-color: #5050a0; }
-
-    #riddle-box {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      z-index: 200; background: rgba(5,5,10,0.96); border: 1px solid #2a2a40;
-      padding: 32px; max-width: 550px; width: 90%;
-      font-family: 'Courier New', monospace; color: #a0a0c4;
-      display: none;
-    }
-    #riddle-box.show { display: block; }
-    #riddle-box .q { font-size: 0.9rem; line-height: 1.8; margin-bottom: 1.5em; }
-    #riddle-box button {
-      display: block; width: 100%; text-align: left; padding: 12px 16px;
-      background: transparent; border: 1px solid #2a2a40; color: #a0a0c4;
-      font-family: 'Courier New', monospace; font-size: 0.8rem; margin-bottom: 8px;
-      cursor: pointer; transition: all 0.3s; line-height: 1.5;
-    }
-    #riddle-box button:hover { border-color: #5050a0; background: #0a0a18; }
-    #riddle-box button.correct { border-color: #508050; color: #80c080; }
-    #riddle-box button.wrong { border-color: #805050; color: #c08080; }
-    #riddle-box .feedback { font-size: 0.8rem; line-height: 1.7; color: #8080a0; margin-top: 1em; display: none; }
-    #riddle-box .feedback.show { display: block; }
-  </style>
+<meta charset="utf-8">
+<title>The Edge — Room 2: The Corridor</title>
+<script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+<script>if(window.AFRAME&&AFRAME.components&&AFRAME.components.grabbable)delete AFRAME.components.grabbable;</script>
+<script src="../libs/a-game/a-game.min.js"></script>
+<style>
+body{margin:0;overflow:hidden}
+#msg{position:fixed;bottom:0;left:0;width:100%;z-index:100;background:rgba(4,4,10,.96);border-top:1px solid #28284a;padding:28px 44px;box-sizing:border-box;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .3s ease,transform .3s ease;max-height:48vh;overflow-y:auto}
+#msg.show{opacity:1;pointer-events:auto;transform:none}
+#msg .spk{font-size:.52rem;letter-spacing:.38em;color:#484890;text-transform:uppercase;margin-bottom:14px}
+#msg .txt{font-size:.88rem;line-height:2.15;color:#9898c4;max-width:700px}
+#msg .dis{font-size:.52rem;color:#303060;margin-top:18px;letter-spacing:.28em;cursor:pointer;text-transform:uppercase;display:inline-block;border:1px solid #28284a;padding:7px 18px;transition:color .2s,border-color .2s}
+#msg .dis:hover{color:#9898c4;border-color:#484890}
+#dec{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;background:rgba(4,4,10,.97);border:1px solid #28284a;padding:36px;max-width:570px;width:90%;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .3s ease}
+#dec.show{opacity:1;pointer-events:auto}
+#dec .q{font-size:.86rem;line-height:2;color:#9898c4;margin-bottom:1.6em}
+#dec button{display:block;width:100%;text-align:left;padding:12px 16px;background:transparent;border:1px solid #28284a;color:#9898c4;font-family:'Courier New',monospace;font-size:.76rem;margin-bottom:8px;cursor:pointer;transition:border-color .2s;line-height:1.65}
+#dec button:hover{border-color:#484890}
+#dec button.cor{border-color:#508050;color:#80c080}
+#dec button.wrg{border-color:#805050;color:#c08080}
+#dec .fb{font-size:.76rem;line-height:1.85;color:#6868a0;margin-top:1.1em;display:none}
+#dec .fb.show{display:block}
+#exit{position:fixed;top:22px;right:22px;z-index:100;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .5s ease}
+#exit.show{opacity:1;pointer-events:auto}
+#exit a{color:#484890;font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;text-decoration:none;border:1px solid #28284a;padding:10px 22px;display:block;transition:all .3s}
+#exit a:hover{color:#9898c4;border-color:#484890}
+</style>
 </head>
 <body>
-
-<div id="msgbox">
-  <div class="speaker" id="msg-speaker"></div>
-  <div class="text" id="msg-text"></div>
-  <div class="dismiss" onclick="closeMsg()">[ continue ]</div>
+<input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true">
+<div id="msg">
+  <div class="spk" id="spk"></div>
+  <div class="txt" id="txt"></div>
+  <div class="dis" onclick="closeMsg()">[ continue ]</div>
 </div>
-
-<div id="riddle-box">
-  <div class="q" id="riddle-q"></div>
-  <div id="riddle-opts"></div>
-  <div class="feedback" id="riddle-fb"></div>
+<div id="dec">
+  <div class="q" id="dq"></div>
+  <div id="dopts"></div>
+  <div class="fb" id="dfb"></div>
 </div>
-
-<div id="door-prompt">
-  <a href="room3.html">Through the final door →</a>
-</div>
-
-<a-scene fog="type: exponential; color: #050510; density: 0.03">
-  <a-sky color="#050510"></a-sky>
-  <a-entity light="type: ambient; color: #1a1a30; intensity: 0.3"></a-entity>
-
-  <!-- Camera -->
-  <a-entity position="0 1.6 18">
-    <a-entity camera look-controls wasd-controls="acceleration: 20">
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
-                material="color: #8080c0; shader: flat; opacity: 0.5"
-                raycaster="objects: .clickable; far: 15"></a-entity>
-    </a-entity>
-  </a-entity>
-
-  <!-- Long corridor floor -->
-  <a-plane position="0 0 0" rotation="-90 0 0" width="4" height="40"
-           material="color: #0a0a14; roughness: 0.9"></a-plane>
-
+<div id="exit"><a href="room3.html">Through the final door →</a></div>
+<a-scene physics="workerUrl: ../libs/a-game/cannonWorker.min.js; gravity: 0 -9.8 0"
+         fog="type: exponential; color: #04040e; density: 0.028" loading-screen="enabled: false">
+  <a-player id="player" locomotion grabbing position="0 0 18"></a-player>
+  <a-sky color="#030310"></a-sky>
+  <a-entity light="type: ambient; color: #181830; intensity: 0.35"></a-entity>
+  <a-entity light="type: point; color: #5858c0; intensity: .45; distance: 7" position="0 3.2 16"></a-entity>
+  <a-entity light="type: point; color: #5050b0; intensity: .35; distance: 7" position="0 3.2 10"></a-entity>
+  <a-entity light="type: point; color: #4848a0; intensity: .35; distance: 7" position="0 3.2  4"></a-entity>
+  <a-entity light="type: point; color: #4040a0; intensity: .35; distance: 7" position="0 3.2 -2"></a-entity>
+  <a-entity light="type: point; color: #3838a0; intensity: .3;  distance: 7" position="0 3.2 -8"></a-entity>
+  <a-entity light="type: point; color: #3838a0; intensity: .25; distance: 7" position="0 3.2 -14"></a-entity>
+  <!-- Floor -->
+  <a-box floor position="0 -0.05 0" width="4" height="0.1" depth="42" material="color: #09091a; roughness: .9"></a-box>
   <!-- Ceiling -->
-  <a-plane position="0 3.5 0" rotation="90 0 0" width="4" height="40"
-           material="color: #050510"></a-plane>
-
-  <!-- Walls -->
-  <a-box position="-2 1.75 0" width="0.1" height="3.5" depth="40" material="color: #0d0d1a; roughness: 0.9"></a-box>
-  <a-box position="2 1.75 0" width="0.1" height="3.5" depth="40" material="color: #0d0d1a; roughness: 0.9"></a-box>
-
+  <a-plane position="0 3.5 0" rotation="90 0 0" width="4" height="42" material="color: #040410"></a-plane>
+  <!-- Long corridor walls -->
+  <a-box wall position="-2 1.75 0" width="0.14" height="3.5" depth="42" material="color: #0c0c20; roughness: .9"></a-box>
+  <a-box wall position=" 2 1.75 0" width="0.14" height="3.5" depth="42" material="color: #0c0c20; roughness: .9"></a-box>
   <!-- End wall -->
-  <a-box position="0 1.75 -20" width="4" height="3.5" depth="0.1" material="color: #0d0d1a"></a-box>
+  <a-box wall position="0 1.75 -21" width="4" height="3.5" depth="0.14" material="color: #0c0c20"></a-box>
+  <!-- Far end text -->
+  <a-text value="Every conversation&#10;has a history.&#10;Learn it."
+          position="0 1.9 -20.8" rotation="0 0 0"
+          text="color: #2828a0; width: 5; align: center; font: monoid"></a-text>
+  <a-entity light="type: point; color: #2828a0; intensity: .35; distance: 5" position="0 2.2 -19"></a-entity>
+  <!-- Floating instruction (near start) -->
+  <a-text value="Walk forward.&#10;Knock on the doors."
+          position="0 2.2 16" rotation="0 180 0"
+          text="color: #303060; width: 4.5; align: center; font: monoid"></a-text>
 
-  <!-- Corridor lights — periodic pools -->
-  <a-entity light="type: point; color: #6060c0; intensity: 0.4; distance: 6" position="0 3.2 16"></a-entity>
-  <a-entity light="type: point; color: #6060c0; intensity: 0.3; distance: 6" position="0 3.2 10"></a-entity>
-  <a-entity light="type: point; color: #6060c0; intensity: 0.3; distance: 6" position="0 3.2 4"></a-entity>
-  <a-entity light="type: point; color: #6060c0; intensity: 0.3; distance: 6" position="0 3.2 -2"></a-entity>
-  <a-entity light="type: point; color: #4040a0; intensity: 0.3; distance: 6" position="0 3.2 -8"></a-entity>
-  <a-entity light="type: point; color: #4040a0; intensity: 0.2; distance: 6" position="0 3.2 -14"></a-entity>
-
-  <!-- Door 1 — left wall (z=14) — "A field is not a topic" -->
-  <a-entity position="-1.9 0 14">
-    <a-box width="0.05" height="2.5" depth="1.2" material="color: #1a1a2a"></a-box>
-    <a-box class="clickable" id="door1" position="0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
-           material="color: #6060c0; emissive: #4040a0; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="[ E ]" position="0.1 1.7 0" rotation="0 90 0"
-            text="color: #404060; width: 1.5; align: center; font: monoid" id="label1"></a-text>
+  <!-- DOOR 1 — left (z=14) -->
+  <a-entity id="d1g" position="-1.94 0 14">
+    <a-box width="0.08" height="2.5" depth="1.3" material="color: #14142a"></a-box>
+    <a-box id="knob1" grabbable="physics:false; immovable:true;"
+           position="0.06 1.25 0" width="0.1" height="0.1" depth="0.1"
+           material="color: #5858c0; emissive: #4040a0; emissiveIntensity: .45; metalness: .6"
+           animation="property: material.emissiveIntensity; from: .3; to: .65; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="KNOCK" position="0.12 1.75 0" rotation="0 90 0"
+            text="color: #303060; width: 1.8; align: center; font: monoid" id="lbl1"></a-text>
   </a-entity>
 
-  <!-- Door 2 — right wall (z=8) — "Fields are messy" -->
-  <a-entity position="1.9 0 8">
-    <a-box width="0.05" height="2.5" depth="1.2" material="color: #1a1a2a"></a-box>
-    <a-box class="clickable" id="door2" position="-0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
-           material="color: #6060c0; emissive: #4040a0; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="[ E ]" position="-0.1 1.7 0" rotation="0 -90 0"
-            text="color: #404060; width: 1.5; align: center; font: monoid" id="label2"></a-text>
+  <!-- DOOR 2 — right (z=8) -->
+  <a-entity id="d2g" position="1.94 0 8">
+    <a-box width="0.08" height="2.5" depth="1.3" material="color: #14142a"></a-box>
+    <a-box id="knob2" grabbable="physics:false; immovable:true;"
+           position="-0.06 1.25 0" width="0.1" height="0.1" depth="0.1"
+           material="color: #5858c0; emissive: #4040a0; emissiveIntensity: .45; metalness: .6"
+           animation="property: material.emissiveIntensity; from: .3; to: .65; dur: 2200; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="KNOCK" position="-0.12 1.75 0" rotation="0 -90 0"
+            text="color: #303060; width: 1.8; align: center; font: monoid" id="lbl2"></a-text>
   </a-entity>
 
-  <!-- Door 3 — left wall (z=2) — "You must listen before you speak" -->
-  <a-entity position="-1.9 0 2">
-    <a-box width="0.05" height="2.5" depth="1.2" material="color: #1a1a2a"></a-box>
-    <a-box class="clickable" id="door3" position="0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
-           material="color: #6060c0; emissive: #4040a0; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="[ E ]" position="0.1 1.7 0" rotation="0 90 0"
-            text="color: #404060; width: 1.5; align: center; font: monoid" id="label3"></a-text>
+  <!-- DOOR 3 — left (z=2) -->
+  <a-entity id="d3g" position="-1.94 0 2">
+    <a-box width="0.08" height="2.5" depth="1.3" material="color: #14142a"></a-box>
+    <a-box id="knob3" grabbable="physics:false; immovable:true;"
+           position="0.06 1.25 0" width="0.1" height="0.1" depth="0.1"
+           material="color: #5858c0; emissive: #4040a0; emissiveIntensity: .45; metalness: .6"
+           animation="property: material.emissiveIntensity; from: .3; to: .65; dur: 1800; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="KNOCK" position="0.12 1.75 0" rotation="0 90 0"
+            text="color: #303060; width: 1.8; align: center; font: monoid" id="lbl3"></a-text>
   </a-entity>
 
-  <!-- Door 4 — right wall (z=-4) — Riddle door -->
-  <a-entity position="1.9 0 -4">
-    <a-box width="0.05" height="2.5" depth="1.2" material="color: #2a1a2a"></a-box>
-    <a-box class="clickable" id="door4" position="-0.05 1.25 0" width="0.08" height="0.08" depth="0.08"
-           material="color: #a04080; emissive: #802060; emissiveIntensity: 0.3; metalness: 0.5"></a-box>
-    <a-text value="[ E ]" position="-0.1 1.7 0" rotation="0 -90 0"
-            text="color: #604060; width: 1.5; align: center; font: monoid" id="label4"></a-text>
-    <a-entity light="type: point; color: #a04080; intensity: 0.2; distance: 3" position="0 1.5 0"></a-entity>
+  <!-- DOOR 4 — right (z=-4) — ominous -->
+  <a-entity id="d4g" position="1.94 0 -4">
+    <a-box width="0.08" height="2.5" depth="1.3" material="color: #1e0a1a"></a-box>
+    <a-box id="knob4" grabbable="physics:false; immovable:true;"
+           position="-0.06 1.25 0" width="0.1" height="0.1" depth="0.1"
+           material="color: #a03880; emissive: #802060; emissiveIntensity: .5; metalness: .6"
+           animation="property: material.emissiveIntensity; from: .35; to: .75; dur: 1500; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text value="KNOCK" position="-0.12 1.75 0" rotation="0 -90 0"
+            text="color: #504050; width: 1.8; align: center; font: monoid" id="lbl4"></a-text>
+    <a-entity light="type: point; color: #a03880; intensity: .25; distance: 3.5" position="-0.5 1.5 0"></a-entity>
   </a-entity>
-
-  <!-- Floating text at start -->
-  <a-text value="Walk forward.\nKnock on the doors." position="0 2 16" 
-          text="color: #404060; width: 4; align: center; font: monoid"
-          look-at="[camera]"></a-text>
-
-  <!-- Mysterious text at far end -->
-  <a-text value="Every conversation\nhas a history.\nLearn it." position="0 1.8 -19.5"
-          text="color: #3030a0; width: 5; align: center; font: monoid"></a-text>
-  <a-entity light="type: point; color: #3030a0; intensity: 0.3; distance: 4" position="0 2 -18"></a-entity>
-
 </a-scene>
-
 <script>
-var doorsKnocked = 0;
-var totalDoors = 4;
+var knocked = 0;
+function showMsg(s,t){document.getElementById('spk').textContent=s;document.getElementById('txt').textContent=t;document.getElementById('msg').classList.add('show')}
+function closeMsg(){document.getElementById('msg').classList.remove('show')}
 
-function showMsg(speaker, text) {
-  document.getElementById('msg-speaker').textContent = speaker;
-  document.getElementById('msg-text').textContent = text;
-  document.getElementById('msgbox').classList.add('show');
-}
+function hideLabel(n){var l=document.getElementById('lbl'+n);if(l)l.setAttribute('visible','false')}
 
-function closeMsg() {
-  document.getElementById('msgbox').classList.remove('show');
-  checkDone();
-}
-
-function checkDone() {
-  if (doorsKnocked >= totalDoors) {
-    document.getElementById('door-prompt').classList.add('show');
-  }
-}
-
-function doorClicked(id) {
-  var label = document.getElementById('label' + id);
-  if (label) label.setAttribute('visible', false);
-  doorsKnocked++;
-}
-
-var doorHandlers = {
-  door1: function() { doorClicked(1); showMsg('Voice behind the door', 'A field is not a topic. It is not a discipline. It is the community of people working on related problems, and the body of work they have produced. It is a living, ongoing conversation.'); },
-  door2: function() { doorClicked(2); showMsg('Voice behind the door', 'In creative computing, your field is almost never a single discipline. It might include a technical literature, an artistic lineage, a critical discourse, and a design community. You don\'t need to master all of these — but you need to know which ones matter for your project.'); },
-  door3: function() { doorClicked(3); showMsg('Voice behind the door', 'You wouldn\'t walk into a room full of people discussing something, ignore everything they\'ve said, and start talking about your own thing. That\'s what a project without context looks like. A literature review is proof that you\'ve been listening.'); },
-  door4: function() { doorClicked(4); showRiddle(); }
-};
-
-var hoveredEl = null;
-
-document.querySelector('a-scene').addEventListener('loaded', function() {
-  document.querySelectorAll('.clickable').forEach(function(el) {
-    el.addEventListener('mouseenter', function() { hoveredEl = el; });
-    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
-  });
-});
-
-function showRiddle() {
-  var box = document.getElementById('riddle-box');
-  document.getElementById('riddle-q').textContent = 'A student says their project is interdisciplinary, so it doesn\'t fit any field. What\'s the problem with this claim?';
-  var opts = document.getElementById('riddle-opts');
-  opts.innerHTML = '';
-
-  var choices = [
-    { text: 'They\'re right — truly original work transcends fields.', correct: false },
-    { text: 'Interdisciplinary work sits at the intersection of multiple fields. You still need to know those fields. Being between them isn\'t the same as being outside them.', correct: true },
-    { text: 'They should pick one field and commit to it.', correct: false }
+function showDecision(){
+  document.getElementById('dq').textContent='A student says their project is interdisciplinary, so it doesn't fit any field. What's the problem with this claim?';
+  var opts=document.getElementById('dopts');opts.innerHTML='';
+  var cs=[
+    {t:'They're right — truly original work transcends fields.',c:false},
+    {t:'Interdisciplinary work sits at the intersection of multiple fields. You still need to know those fields. Being between them isn't the same as being outside them.',c:true},
+    {t:'They should pick one field and commit to it.',c:false}
   ];
-
-  choices.forEach(function(c) {
-    var btn = document.createElement('button');
-    btn.textContent = c.text;
-    btn.onclick = function() {
-      var all = opts.querySelectorAll('button');
-      all.forEach(function(b) { b.style.pointerEvents = 'none'; });
-      if (c.correct) {
-        btn.classList.add('correct');
-        document.getElementById('riddle-fb').textContent = 'Correct. Interdisciplinarity is harder, not easier. You have to read in multiple directions. The intersection is where the work lives — not the void.';
-      } else {
-        btn.classList.add('wrong');
-        choices.forEach(function(ch, i) { if (ch.correct) all[i].classList.add('correct'); });
-        document.getElementById('riddle-fb').textContent = 'Not quite. Interdisciplinary work sits between fields, not outside them. You still need to know the conversations happening in each. It\'s harder, not easier.';
-      }
-      document.getElementById('riddle-fb').classList.add('show');
-      setTimeout(function() {
-        box.classList.remove('show');
-        checkDone();
-      }, 4000);
+  cs.forEach(function(o){
+    var b=document.createElement('button');b.textContent=o.t;
+    if(o.c)b.dataset.correct='true';
+    b.onclick=function(){
+      var all=opts.querySelectorAll('button');all.forEach(function(x){x.style.pointerEvents='none'});
+      b.classList.add(o.c?'cor':'wrg');
+      if(!o.c)all.forEach(function(x){if(x.dataset.correct)x.classList.add('cor')});
+      var fb=document.getElementById('dfb');
+      fb.textContent=o.c?'Correct. Interdisciplinarity is harder, not easier. You have to read in multiple directions. The intersection is where the work lives — not the void.':'Not quite. Interdisciplinary work sits between fields, not outside them. You still need to know the conversations in each. It's harder, not easier.';
+      fb.classList.add('show');
+      setTimeout(function(){document.getElementById('dec').classList.remove('show');document.getElementById('exit').classList.add('show')},4000);
     };
-    opts.appendChild(btn);
+    opts.appendChild(b);
   });
-
-  box.classList.add('show');
+  document.getElementById('dec').classList.add('show');
 }
 
-// Simple look-at component
-AFRAME.registerComponent('look-at', {
-  schema: { type: 'selector' },
-  tick: function() {
-    if (!this.data) return;
-    var target = this.data.object3D.position;
-    var pos = new THREE.Vector3();
-    this.el.object3D.getWorldPosition(pos);
-    this.el.object3D.rotation.y = Math.atan2(target.x - pos.x, target.z - pos.z);
-  }
-});
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  if (!hoveredEl) return;
-  var fn = doorHandlers[hoveredEl.id];
-  if (!fn || hoveredEl.dataset.done) return;
-  hoveredEl.dataset.done = '1';
-  fn();
+['knob1','knob2','knob3','knob4'].forEach(function(id,i){
+  document.getElementById(id).addEventListener('grab',function(e){
+    if(this.dataset.done){e.detail.grabbing.components.grabbing.drop();return}
+    this.dataset.done='1';
+    e.detail.grabbing.components.grabbing.drop();
+    knocked++;
+    hideLabel(i+1);
+    var msgs=[
+      ['Voice behind the door','A field is not a topic. It is not a discipline. It is the community of people working on related problems, and the body of work they have produced. It is a living, ongoing conversation.'],
+      ['Voice behind the door','In creative computing, your field is almost never a single discipline. It might include a technical literature, an artistic lineage, a critical discourse, and a design community. You don't need to master all of these — but you need to know which ones matter for your project.'],
+      ['Voice behind the door','You wouldn't walk into a room full of people discussing something, ignore everything they've said, and start talking about your own thing. That's what a project without context looks like. A literature review is proof that you've been listening.'],
+      null
+    ];
+    if(msgs[i])showMsg(msgs[i][0],msgs[i][1]);
+    else showDecision();
+  });
 });
 </script>
 </body>

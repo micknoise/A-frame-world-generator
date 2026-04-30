@@ -1,196 +1,146 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Room 5 — The Telephone Room</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #msgbox {
-      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
-      background: rgba(8,5,5,0.94); border-top: 1px solid #352520;
-      padding: 24px 32px; box-sizing: border-box;
-      font-family: 'Courier New', monospace; color: #c4a0a0;
-      display: none; max-height: 45vh; overflow-y: auto;
-    }
-    #msgbox.show { display: block; }
-    #msgbox .speaker { font-size: 0.65rem; letter-spacing: 0.2em; color: #a05050; text-transform: uppercase; margin-bottom: 8px; }
-    #msgbox .text { font-size: 0.85rem; line-height: 1.8; }
-    #msgbox .dismiss { font-size: 0.65rem; color: #604040; margin-top: 12px; letter-spacing: 0.15em; cursor: pointer; }
-    #msgbox .dismiss:hover { color: #c4a0a0; }
-
-    #counter {
-      position: fixed; top: 20px; left: 20px; z-index: 100;
-      font-family: 'Courier New', monospace; font-size: 0.7rem;
-      color: #604040; letter-spacing: 0.15em; pointer-events: none;
-    }
-
-    #door-prompt {
-      position: fixed; top: 20px; right: 20px; z-index: 100;
-      font-family: 'Courier New', monospace; display: none;
-    }
-    #door-prompt.show { display: block; }
-    #door-prompt a {
-      color: #a05050; font-size: 0.75rem; letter-spacing: 0.15em;
-      text-decoration: none; border: 1px solid #352520; padding: 10px 20px;
-      transition: all 0.3s;
-    }
-    #door-prompt a:hover { color: #c4a0a0; border-color: #a05050; }
-  </style>
+<meta charset="utf-8">
+<title>The Edge — Room 5: The Telephone Room</title>
+<script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+<script>if(window.AFRAME&&AFRAME.components&&AFRAME.components.grabbable)delete AFRAME.components.grabbable;</script>
+<script src="../libs/a-game/a-game.min.js"></script>
+<style>
+body{margin:0;overflow:hidden}
+#msg{position:fixed;bottom:0;left:0;width:100%;z-index:100;background:rgba(8,4,4,.96);border-top:1px solid #4a1818;padding:28px 44px;box-sizing:border-box;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .3s ease,transform .3s ease;max-height:48vh;overflow-y:auto}
+#msg.show{opacity:1;pointer-events:auto;transform:none}
+#msg .spk{font-size:.52rem;letter-spacing:.38em;color:#904040;text-transform:uppercase;margin-bottom:14px}
+#msg .txt{font-size:.88rem;line-height:2.15;color:#c49090;max-width:700px}
+#msg .dis{font-size:.52rem;color:#4a1818;margin-top:18px;letter-spacing:.28em;cursor:pointer;text-transform:uppercase;display:inline-block;border:1px solid #3a1010;padding:7px 18px;transition:color .2s,border-color .2s}
+#msg .dis:hover{color:#c49090;border-color:#904040}
+#counter{position:fixed;top:22px;left:22px;z-index:100;font-family:'Courier New',monospace;font-size:.6rem;letter-spacing:.22em;color:#3a1818;transition:color .4s}
+#counter.lit{color:#a06060}
+#exit{position:fixed;top:22px;right:22px;z-index:100;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .5s ease}
+#exit.show{opacity:1;pointer-events:auto}
+#exit a{color:#904040;font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;text-decoration:none;border:1px solid #4a1818;padding:10px 22px;display:block;transition:all .3s}
+#exit a:hover{color:#c49090;border-color:#904040}
+</style>
 </head>
 <body>
-
-<div id="counter">Calls received: <span id="count">0</span> / 5</div>
-
-<div id="msgbox">
-  <div class="speaker" id="msg-speaker"></div>
-  <div class="text" id="msg-text"></div>
-  <div class="dismiss" onclick="closeMsg()">[ hang up ]</div>
+<input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true">
+<div id="counter">Calls received: 0 / 5</div>
+<div id="msg">
+  <div class="spk" id="spk"></div>
+  <div class="txt" id="txt"></div>
+  <div class="dis" onclick="closeMsg()">[ hang up ]</div>
 </div>
-
-<div id="door-prompt">
-  <a href="room6.html">Through the mirror →</a>
-</div>
-
-<a-scene fog="type: exponential; color: #0a0505; density: 0.04">
-  <a-sky color="#0a0505"></a-sky>
-  <a-entity light="type: ambient; color: #2a1818; intensity: 0.3"></a-entity>
-
-  <!-- Camera -->
-  <a-entity position="0 1.6 4">
-    <a-entity camera look-controls wasd-controls="acceleration: 20">
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
-                material="color: #c4a0a0; shader: flat; opacity: 0.5"
-                raycaster="objects: .clickable; far: 15"></a-entity>
-    </a-entity>
-  </a-entity>
-
-  <!-- Floor — dark carpet -->
-  <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10"
-           material="color: #100808; roughness: 0.95"></a-plane>
-
+<div id="exit"><a href="room6.html">Through the mirror &#8594;</a></div>
+<a-scene physics="workerUrl: ../libs/a-game/cannonWorker.min.js; gravity: 0 -9.8 0"
+         fog="type: exponential; color: #080404; density: 0.04" loading-screen="enabled: false">
+  <a-player id="player" locomotion grabbing position="0 0 3"></a-player>
+  <a-sky color="#060202"></a-sky>
+  <a-entity light="type: ambient; color: #301010; intensity: 0.3"></a-entity>
+  <a-entity light="type: point; color: #c04040; intensity: .3; distance: 5" position="0 3.5 0"
+            animation="property: light.intensity; from: .2; to: .4; dur: 1800; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+  <a-entity light="type: point; color: #d04848; intensity: .25; distance: 4" position="-4 3 -4"></a-entity>
+  <a-entity light="type: point; color: #c83a3a; intensity: .25; distance: 4" position=" 4 3 -4"></a-entity>
+  <a-entity light="type: point; color: #c04040; intensity: .2; distance: 3" position="-4 3  2"></a-entity>
+  <a-entity light="type: point; color: #b83838; intensity: .2; distance: 3" position=" 4 3  2"></a-entity>
+  <!-- Floor -->
+  <a-box floor position="0 -0.05 0" width="11" height="0.1" depth="11" material="color: #0a0505; roughness: .95"></a-box>
   <!-- Ceiling -->
-  <a-plane position="0 3.5 0" rotation="90 0 0" width="10" height="10"
-           material="color: #080505"></a-plane>
-
-  <!-- Walls — wallpapered feel -->
-  <a-box position="-5 1.75 0" width="0.1" height="3.5" depth="10" material="color: #1a0d0d; roughness: 0.8"></a-box>
-  <a-box position="5 1.75 0" width="0.1" height="3.5" depth="10" material="color: #1a0d0d; roughness: 0.8"></a-box>
-  <a-box position="0 1.75 -5" width="10" height="3.5" depth="0.1" material="color: #1a0d0d; roughness: 0.8"></a-box>
-  <a-box position="0 1.75 5" width="10" height="3.5" depth="0.1" material="color: #1a0d0d; roughness: 0.8"></a-box>
-
-  <!-- Central chandelier (warm) -->
-  <a-entity position="0 3.2 0">
-    <a-sphere radius="0.15" material="color: #e8a040; emissive: #e8a040; emissiveIntensity: 0.4"></a-sphere>
-    <a-entity light="type: point; color: #e8a040; intensity: 0.5; distance: 6"></a-entity>
+  <a-plane position="0 4 0" rotation="90 0 0" width="11" height="11" material="color: #060303"></a-plane>
+  <!-- Walls -->
+  <a-box wall position="-5.5 2 0"  width=".14" height="4" depth="11.3" material="color: #100a0a; roughness: .9"></a-box>
+  <a-box wall position=" 5.5 2 0"  width=".14" height="4" depth="11.3" material="color: #100a0a; roughness: .9"></a-box>
+  <a-box wall position="0 2 -5.5"  width="11.3" height="4" depth=".14" material="color: #100a0a; roughness: .9"></a-box>
+  <a-box wall position="0 2  5.5"  width="11.3" height="4" depth=".14" material="color: #100a0a; roughness: .9"></a-box>
+  <!-- Wainscotting detail -->
+  <a-box position="-5.5 0.45 0" width=".02" height=".9" depth="11" material="color: #1a1010; roughness: .9"></a-box>
+  <a-box position=" 5.5 0.45 0" width=".02" height=".9" depth="11" material="color: #1a1010; roughness: .9"></a-box>
+  <!-- PHONE 1 — center back table -->
+  <a-entity id="t1" position="0 0 -3.5">
+    <a-box width="1.1" height=".7" depth=".65" material="color: #1a1010; roughness: .85"></a-box>
+    <a-box width="1.15" height=".04" depth=".68" position="0 .37 0" material="color: #0e0a0a; metalness: .2"></a-box>
+    <a-box id="phone1" grabbable="physics:false; immovable:true;"
+           position="0 .58 0.05" width=".28" height=".14" depth=".52"
+           material="color: #1a0a0a; emissive: #500000; emissiveIntensity: .35"
+           animation="property: material.emissiveIntensity; from: .25; to: .5; dur: 3000; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text id="lbl1" value="ANSWER" position="0 1.18 .08" text="color: #601818; width: 1.8; align: center; font: monoid"
+            animation="property: position; from: 0 1.14 .08; to: 0 1.22 .08; dur: 1800; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
   </a-entity>
-
-  <!-- Room title -->
-  <a-text value="PICK UP THE PHONES" position="0 2.8 -4.8"
-          text="color: #4a2020; width: 6; align: center; font: monoid"></a-text>
-
-  <!-- PHONE 1: Future Work sections — on small table, left front -->
-  <a-entity position="-3 0 2">
-    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
-    <!-- Phone body -->
-    <a-box class="clickable" id="phone1" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
-           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
-    <!-- Handset -->
-    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
-                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
-    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
-    <a-text value="1" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  <!-- PHONE 2 — left back corner -->
+  <a-entity id="t2" position="-3.5 0 -3.5">
+    <a-box width="1.1" height=".7" depth=".65" material="color: #18100e; roughness: .85"></a-box>
+    <a-box id="phone2" grabbable="physics:false; immovable:true;"
+           position="0 .58 0.05" width=".28" height=".14" depth=".52"
+           material="color: #1a0a0a; emissive: #500000; emissiveIntensity: .35"
+           animation="property: material.emissiveIntensity; from: .2; to: .55; dur: 2600; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text id="lbl2" value="ANSWER" position="0 1.18 .08" text="color: #601818; width: 1.8; align: center; font: monoid"
+            animation="property: position; from: 0 1.14 .08; to: 0 1.22 .08; dur: 2100; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
   </a-entity>
-
-  <!-- PHONE 2: Survey papers — right front -->
-  <a-entity position="3 0 2">
-    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
-    <a-box class="clickable" id="phone2" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
-           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
-    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
-                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
-    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
-    <a-text value="2" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  <!-- PHONE 3 — right back corner -->
+  <a-entity id="t3" position="3.5 0 -3.5">
+    <a-box width="1.1" height=".7" depth=".65" material="color: #18100e; roughness: .85"></a-box>
+    <a-box id="phone3" grabbable="physics:false; immovable:true;"
+           position="0 .58 0.05" width=".28" height=".14" depth=".52"
+           material="color: #1a0a0a; emissive: #500000; emissiveIntensity: .35"
+           animation="property: material.emissiveIntensity; from: .3; to: .45; dur: 2200; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text id="lbl3" value="ANSWER" position="0 1.18 .08" text="color: #601818; width: 1.8; align: center; font: monoid"
+            animation="property: position; from: 0 1.14 .08; to: 0 1.22 .08; dur: 1600; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
   </a-entity>
-
-  <!-- PHONE 3: Citation chains — left back -->
-  <a-entity position="-3 0 -2">
-    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
-    <a-box class="clickable" id="phone3" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
-           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
-    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
-                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
-    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
-    <a-text value="3" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  <!-- PHONE 4 — left side -->
+  <a-entity id="t4" position="-3.5 0 0.5">
+    <a-box width=".65" height=".7" depth="1.1" material="color: #18100e; roughness: .85"></a-box>
+    <a-box id="phone4" grabbable="physics:false; immovable:true;"
+           position="0 .58 0.05" width=".28" height=".14" depth=".52"
+           material="color: #1a0a0a; emissive: #500000; emissiveIntensity: .35"
+           animation="property: material.emissiveIntensity; from: .22; to: .52; dur: 2900; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text id="lbl4" value="ANSWER" position="0 1.18 .08" text="color: #601818; width: 1.8; align: center; font: monoid"
+            animation="property: position; from: 0 1.14 .08; to: 0 1.22 .08; dur: 2350; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
   </a-entity>
-
-  <!-- PHONE 4: Exhibitions not just papers — right back -->
-  <a-entity position="3 0 -2">
-    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
-    <a-box class="clickable" id="phone4" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
-           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
-    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
-                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
-    <a-entity light="type: point; color: #a05050; intensity: 0.2; distance: 2" position="0 0.8 0"></a-entity>
-    <a-text value="4" position="0 0.8 0" text="color: #a05050; width: 1; align: center; font: monoid"></a-text>
+  <!-- PHONE 5 — right side -->
+  <a-entity id="t5" position="3.5 0 0.5">
+    <a-box width=".65" height=".7" depth="1.1" material="color: #18100e; roughness: .85"></a-box>
+    <a-box id="phone5" grabbable="physics:false; immovable:true;"
+           position="0 .58 0.05" width=".28" height=".14" depth=".52"
+           material="color: #1a0a0a; emissive: #500000; emissiveIntensity: .35"
+           animation="property: material.emissiveIntensity; from: .28; to: .48; dur: 2400; easing: easeInOutSine; loop: true; dir: alternate"></a-box>
+    <a-text id="lbl5" value="ANSWER" position="0 1.18 .08" text="color: #601818; width: 1.8; align: center; font: monoid"
+            animation="property: position; from: 0 1.14 .08; to: 0 1.22 .08; dur: 1950; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
   </a-entity>
-
-  <!-- PHONE 5: Talk to people — centre back -->
-  <a-entity position="0 0 -3.5">
-    <a-box width="0.5" height="0.6" depth="0.5" material="color: #1a100a; roughness: 0.8"></a-box>
-    <a-box class="clickable" id="phone5" width="0.25" height="0.12" depth="0.35" position="0 0.36 0"
-           material="color: #1a1a14; metalness: 0.4; roughness: 0.6"></a-box>
-    <a-cylinder height="0.3" radius="0.025" position="0 0.46 0" rotation="0 0 90"
-                material="color: #1a1a14; metalness: 0.4"></a-cylinder>
-    <a-entity light="type: point; color: #cc6060; intensity: 0.3; distance: 2" position="0 0.8 0"></a-entity>
-    <a-text value="5" position="0 0.8 0" text="color: #cc6060; width: 1; align: center; font: monoid"></a-text>
-  </a-entity>
-
 </a-scene>
-
 <script>
 var calls = 0;
+var total = 5;
 var phoneData = {
-  phone1: { speaker: 'Caller 1', text: 'Read the "future work" sections. Every good paper ends by saying what it didn\'t do. Those are gaps, pre-identified for you. Start there. It\'s the easiest strategy and the most underused.' },
-  phone2: { speaker: 'Caller 2', text: 'Read survey papers and literature reviews. These map a field in one document. They\'re the fastest way to understand what exists and where the edges are. One good survey can save you weeks.' },
-  phone3: { speaker: 'Caller 3', text: 'Follow citation chains. If Paper A cites Paper B, and B cites C — follow the chain. At some point the chain thins out. That thinning is the frontier. That\'s where you want to be.' },
-  phone4: { speaker: 'Caller 4', text: 'Look at what\'s exhibited, not just what\'s published. In creative computing, major artworks often precede papers. Check Ars Electronica, ISEA, NeurIPS Creativity workshops, transmediale, festival archives. Ignoring this is like reviewing physics and only checking half the journals.' },
-  phone5: { speaker: 'Caller 5', text: 'Talk to people. Ask practitioners and researchers what they think is unresolved. You\'d be surprised how often the answer is "nobody has tried that." The frontier isn\'t always in the papers. Sometimes it\'s in the conversations around them.' }
+  phone1: ['The Advisor', 'The biggest thing students get wrong about the literature review: they think it should be comprehensive. It shouldn\'t. It should be selective. You\'re building an argument. Every source you include is evidence for a claim you\'re making about the state of the field.'],
+  phone2: ['The Examiner', 'When I read a dissertation, I go straight to the gap statement. Everything else either supports it or it doesn\'t. If the gap is missing, vague, or obvious, the whole project collapses. The gap is the load-bearing wall. Don\'t decorate the building before you build the wall.'],
+  phone3: ['The Critic', 'Novelty is not enough. "Nobody has done this before" isn\'t interesting on its own. The question is: why does it matter that nobody\'s done it? What does the absence cost? What would the presence add? Gap + stakes = research question.'],
+  phone4: ['The Methodologist', 'Your gap determines your method. If you have a knowledge gap, you do a study. If you have a method gap, you build or test something. If you have a critical gap, you probably need theory and analysis. The gap is not separate from the approach — it generates it.'],
+  phone5: ['The Field', 'You are entering a conversation that started before you were born and will continue after you finish. Your project is one sentence in that conversation. Make it count. Make it land in the right place. Make it something the conversation can actually use.']
 };
-
-function showMsg(speaker, text) {
-  document.getElementById('msg-speaker').textContent = speaker;
-  document.getElementById('msg-text').textContent = text;
-  document.getElementById('msgbox').classList.add('show');
+function updateCounter() {
+  var el = document.getElementById('counter');
+  el.textContent = 'Calls received: ' + calls + ' / ' + total;
+  el.classList.add('lit');
 }
-
+function showMsg(s, t) {
+  document.getElementById('spk').textContent = s;
+  document.getElementById('txt').textContent = t;
+  document.getElementById('msg').classList.add('show');
+}
 function closeMsg() {
-  document.getElementById('msgbox').classList.remove('show');
-  if (calls >= 5) {
-    document.getElementById('door-prompt').classList.add('show');
-  }
+  document.getElementById('msg').classList.remove('show');
+  if (calls >= total) document.getElementById('exit').classList.add('show');
 }
-
-var hoveredEl = null;
-
-document.querySelector('a-scene').addEventListener('loaded', function() {
-  document.querySelectorAll('.clickable').forEach(function(el) {
-    el.addEventListener('mouseenter', function() { hoveredEl = el; });
-    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
+Object.keys(phoneData).forEach(function(id, i) {
+  document.getElementById(id).addEventListener('grab', function(e) {
+    if (this.dataset.done) { e.detail.grabbing.components.grabbing.drop(); return; }
+    this.dataset.done = '1';
+    e.detail.grabbing.components.grabbing.drop();
+    calls++;
+    updateCounter();
+    var lbl = document.getElementById('lbl' + (i + 1));
+    if (lbl) lbl.setAttribute('visible', 'false');
+    showMsg(phoneData[id][0], phoneData[id][1]);
   });
-});
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  if (!hoveredEl) return;
-  var d = phoneData[hoveredEl.id];
-  if (!d || hoveredEl.dataset.done) return;
-  hoveredEl.dataset.done = '1';
-  calls++;
-  document.getElementById('count').textContent = calls;
-  showMsg(d.speaker, d.text);
 });
 </script>
 </body>

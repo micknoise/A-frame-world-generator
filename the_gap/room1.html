@@ -1,215 +1,137 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Room 1 — The Red Room</title>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: #000; z-index: 9999;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-family: 'Courier New', monospace; color: #c4a080; cursor: pointer;
-    }
-    #overlay.gone { display: none; }
-    #overlay h1 { font-size: 2.8rem; letter-spacing: 0.5em; margin-bottom: 0.3em; color: #e0c8a0; }
-    #overlay h2 { font-size: 0.85rem; letter-spacing: 0.2em; color: #806040; font-weight: 400; margin-bottom: 2em; }
-    #overlay .sub { font-size: 0.8rem; color: #806040; line-height: 1.8; text-align: center; max-width: 500px; margin-bottom: 2em; }
-    #overlay .enter { font-size: 0.7rem; letter-spacing: 0.3em; color: #604830; animation: p 2s ease infinite; }
-    @keyframes p { 0%,100%{opacity:0.3} 50%{opacity:1} }
-    #overlay .controls { font-size: 0.6rem; color: #504030; margin-top: 1.5em; letter-spacing: 0.1em; }
-
-    #msgbox {
-      position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
-      background: rgba(10,0,0,0.92); border-top: 1px solid #4a1515;
-      padding: 24px 32px; box-sizing: border-box;
-      font-family: 'Courier New', monospace; color: #c4a080;
-      display: none; max-height: 45vh; overflow-y: auto;
-    }
-    #msgbox.show { display: block; }
-    #msgbox .speaker { font-size: 0.65rem; letter-spacing: 0.2em; color: #804040; text-transform: uppercase; margin-bottom: 8px; }
-    #msgbox .text { font-size: 0.85rem; line-height: 1.8; color: #c4a080; }
-    #msgbox .dismiss { font-size: 0.65rem; color: #604830; margin-top: 12px; letter-spacing: 0.15em; cursor: pointer; }
-    #msgbox .dismiss:hover { color: #c4a080; }
-
-    #door-prompt {
-      position: fixed; top: 20px; right: 20px; z-index: 100;
-      font-family: 'Courier New', monospace; display: none;
-    }
-    #door-prompt.show { display: block; }
-    #door-prompt a {
-      color: #804040; font-size: 0.75rem; letter-spacing: 0.15em;
-      text-decoration: none; border: 1px solid #4a1515; padding: 10px 20px;
-      transition: all 0.3s;
-    }
-    #door-prompt a:hover { color: #c4a080; border-color: #804040; }
-  </style>
+<meta charset="utf-8">
+<title>The Edge — Room 1: The Red Room</title>
+<script src="../libs/aframe/aframe-v1.3.0.min.js"></script>
+<script>if(window.AFRAME&&AFRAME.components&&AFRAME.components.grabbable)delete AFRAME.components.grabbable;</script>
+<script src="../libs/a-game/a-game.min.js"></script>
+<style>
+body{margin:0;overflow:hidden}
+#overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Courier New',monospace;cursor:pointer;transition:opacity .6s}
+#overlay.gone{opacity:0;pointer-events:none}
+#overlay .t{font-size:3.2rem;letter-spacing:.55em;color:#e8c89a;font-weight:400;margin-bottom:.15em}
+#overlay .s{font-size:.68rem;letter-spacing:.3em;color:#7a5828;margin-bottom:2.8em;text-transform:uppercase}
+#overlay .b{font-size:.78rem;color:#6a4820;line-height:2.3;text-align:center;max-width:460px;margin-bottom:2.8em}
+#overlay .cta{font-size:.58rem;letter-spacing:.45em;color:#4a3018;animation:p 2.5s ease infinite;text-transform:uppercase}
+#overlay .ctrl{font-size:.52rem;color:#2a1a08;margin-top:2.2em;letter-spacing:.12em}
+@keyframes p{0%,100%{opacity:.15}50%{opacity:1}}
+#msg{position:fixed;bottom:0;left:0;width:100%;z-index:100;background:rgba(5,0,0,.96);border-top:1px solid #300a0a;padding:28px 44px;box-sizing:border-box;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .3s ease,transform .3s ease;max-height:48vh;overflow-y:auto}
+#msg.show{opacity:1;pointer-events:auto;transform:none}
+#msg .spk{font-size:.52rem;letter-spacing:.38em;color:#7a2828;text-transform:uppercase;margin-bottom:14px}
+#msg .txt{font-size:.88rem;line-height:2.15;color:#c4a070;max-width:700px}
+#msg .dis{font-size:.52rem;color:#422010;margin-top:18px;letter-spacing:.28em;cursor:pointer;text-transform:uppercase;display:inline-block;border:1px solid #2e0a0a;padding:7px 18px;transition:color .2s,border-color .2s}
+#msg .dis:hover{color:#c4a070;border-color:#7a2828}
+#exit{position:fixed;top:22px;right:22px;z-index:100;font-family:'Courier New',monospace;opacity:0;pointer-events:none;transition:opacity .5s ease}
+#exit.show{opacity:1;pointer-events:auto}
+#exit a{color:#7a2828;font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;text-decoration:none;border:1px solid #2e0a0a;padding:10px 22px;display:block;transition:all .3s}
+#exit a:hover{color:#c4a070;border-color:#7a2828;background:rgba(50,0,0,.5)}
+</style>
 </head>
 <body>
-
+<input type="checkbox" id="save-position-from-vr" hidden aria-hidden="true">
 <div id="overlay" onclick="enter()">
-  <h1>THE EDGE</h1>
-  <h2>A Journey in Eight Rooms</h2>
-  <div class="sub">
-    You are looking for something that doesn't exist yet.<br>
-    You won't find it by staying where you are.<br>
-    You have to go to the edge.
-  </div>
-  <div class="enter">[ click to enter ]</div>
-  <div class="controls">WASD move · drag to look · E to interact</div>
+  <div class="t">THE EDGE</div>
+  <div class="s">A Journey in Eight Rooms</div>
+  <div class="b">You are looking for something that doesn't exist yet.<br>You won't find it by staying where you are.<br>You have to go to the edge.</div>
+  <div class="cta">[ click to enter ]</div>
+  <div class="ctrl">WASD move &nbsp;·&nbsp; drag to look &nbsp;·&nbsp; E to interact</div>
 </div>
-
-<div id="msgbox">
-  <div class="speaker" id="msg-speaker"></div>
-  <div class="text" id="msg-text"></div>
-  <div class="dismiss" onclick="closeMsg()">[ continue ]</div>
+<div id="msg">
+  <div class="spk" id="spk"></div>
+  <div class="txt" id="txt"></div>
+  <div class="dis" onclick="closeMsg()">[ continue ]</div>
 </div>
-
-<div id="door-prompt">
-  <a href="room2.html">Enter the corridor →</a>
-</div>
-
-<a-scene fog="type: exponential; color: #1a0000; density: 0.06">
-  <a-sky color="#0a0000"></a-sky>
-  <a-entity light="type: ambient; color: #3a1515; intensity: 0.4"></a-entity>
-
-  <!-- Camera -->
-  <a-entity position="0 1.6 3">
-    <a-entity camera look-controls wasd-controls="acceleration: 20">
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.018"
-                material="color: #c4a080; shader: flat; opacity: 0.5"
-                raycaster="objects: .clickable; far: 15"></a-entity>
-    </a-entity>
-  </a-entity>
-
-  <!-- Chevron floor -->
-  <a-plane position="0 0 0" rotation="-90 0 0" width="8" height="10"
-           material="color: #1a0808; roughness: 0.9"></a-plane>
-  <!-- Chevron stripes (simplified) -->
-  <a-plane position="0 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-  <a-plane position="0.8 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-  <a-plane position="-0.8 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-  <a-plane position="1.6 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-  <a-plane position="-1.6 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-  <a-plane position="2.4 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-  <a-plane position="-2.4 0.005 0" rotation="-90 0 0" width="0.15" height="10" material="color: #e8dcc4; roughness: 0.8"></a-plane>
-
-  <!-- Red curtains — left -->
-  <a-box position="-3.8 2 0" width="0.3" height="4.5" depth="10" material="color: #6a1010; roughness: 0.7"></a-box>
-  <!-- Curtain folds left -->
-  <a-box position="-3.5 2 -1" width="0.15" height="4.2" depth="0.6" material="color: #7a1818"></a-box>
-  <a-box position="-3.5 2 1" width="0.15" height="4.2" depth="0.6" material="color: #5a0808"></a-box>
-  <a-box position="-3.5 2 -3" width="0.15" height="4.2" depth="0.6" material="color: #7a1818"></a-box>
-
-  <!-- Red curtains — right -->
-  <a-box position="3.8 2 0" width="0.3" height="4.5" depth="10" material="color: #6a1010; roughness: 0.7"></a-box>
-  <a-box position="3.5 2 -1" width="0.15" height="4.2" depth="0.6" material="color: #7a1818"></a-box>
-  <a-box position="3.5 2 1" width="0.15" height="4.2" depth="0.6" material="color: #5a0808"></a-box>
-  <a-box position="3.5 2 -3" width="0.15" height="4.2" depth="0.6" material="color: #7a1818"></a-box>
-
-  <!-- Back curtain -->
-  <a-box position="0 2 -4.8" width="8" height="4.5" depth="0.3" material="color: #6a1010; roughness: 0.7"></a-box>
-
-  <!-- Front curtain (behind camera) -->
-  <a-box position="0 2 4.8" width="8" height="4.5" depth="0.3" material="color: #6a1010; roughness: 0.7"></a-box>
-
+<div id="exit"><a href="room2.html">Enter the corridor →</a></div>
+<a-scene physics="workerUrl: ../libs/a-game/cannonWorker.min.js; gravity: 0 -9.8 0"
+         fog="type: exponential; color: #0c0000; density: 0.06" loading-screen="enabled: false">
+  <a-player id="player" locomotion grabbing position="0 0 3"></a-player>
+  <a-sky color="#080000"></a-sky>
+  <a-entity light="type: ambient; color: #3d1515; intensity: 0.5"></a-entity>
+  <a-entity light="type: point; color: #e0a030; intensity: 1.0; distance: 10" position="0 3.8 0"
+            animation="property: light.intensity; from: 0.75; to: 1.1; dur: 5500; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+  <a-entity light="type: point; color: #c07020; intensity: 0.55; distance: 5" position="-2.5 1.5 -1.8"></a-entity>
+  <a-entity light="type: point; color: #800010; intensity: 0.3; distance: 9" position="0 3.5 2"
+            animation="property: light.intensity; from: 0.2; to: 0.45; dur: 7000; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+  <!-- Floor -->
+  <a-box floor position="0 -0.05 0" width="8" height="0.1" depth="10" material="color: #120404; roughness: .95"></a-box>
+  <!-- Chevron stripes -->
+  <a-plane position="0 0.005 0"    rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position=" 0.72 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position="-0.72 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position=" 1.44 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position="-1.44 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position=" 2.16 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position="-2.16 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position=" 2.88 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position="-2.88 0.005 0" rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position=" 3.6 0.005 0"  rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
+  <a-plane position="-3.6 0.005 0"  rotation="-90 0 0" width="0.09" height="10" material="color: #ddd4b4; shader: flat"></a-plane>
   <!-- Ceiling -->
-  <a-plane position="0 4.2 0" rotation="90 0 0" width="8" height="10" material="color: #0a0000"></a-plane>
-
-  <!-- Central warm light -->
-  <a-entity light="type: point; color: #e8a040; intensity: 0.6; distance: 8" position="0 3.5 0"></a-entity>
-
-  <!-- Floor lamp — left -->
-  <a-entity position="-2.5 0 -2">
-    <a-cylinder height="1.2" radius="0.03" material="color: #2a1a0a; metalness: 0.3"></a-cylinder>
-    <a-cone height="0.25" radius-bottom="0.18" radius-top="0.04" position="0 0.72 0" material="color: #c8a060; opacity: 0.7"></a-cone>
-    <a-entity light="type: point; color: #e8a040; intensity: 0.5; distance: 4" position="0 0.8 0"></a-entity>
+  <a-plane position="0 4.5 0" rotation="90 0 0" width="8" height="10" material="color: #040000"></a-plane>
+  <!-- Curtain walls -->
+  <a-box wall position="-4 2.25 0" width="0.22" height="4.5" depth="10.2" material="color: #560808; roughness: .65"></a-box>
+  <a-box wall position=" 4 2.25 0" width="0.22" height="4.5" depth="10.2" material="color: #560808; roughness: .65"></a-box>
+  <a-box wall position="0 2.25 -5" width="8.5" height="4.5" depth="0.22" material="color: #560808; roughness: .65"></a-box>
+  <a-box wall position="0 2.25  5" width="8.5" height="4.5" depth="0.22" material="color: #560808; roughness: .65"></a-box>
+  <!-- Curtain folds -->
+  <a-box position="-3.55 2.25 -3" width="0.08" height="4.3" depth="0.65" material="color: #6e0c0c"></a-box>
+  <a-box position="-3.55 2.25 -1" width="0.08" height="4.3" depth="0.65" material="color: #400606"></a-box>
+  <a-box position="-3.55 2.25  1" width="0.08" height="4.3" depth="0.65" material="color: #6e0c0c"></a-box>
+  <a-box position="-3.55 2.25  3" width="0.08" height="4.3" depth="0.65" material="color: #400606"></a-box>
+  <a-box position=" 3.55 2.25 -3" width="0.08" height="4.3" depth="0.65" material="color: #6e0c0c"></a-box>
+  <a-box position=" 3.55 2.25 -1" width="0.08" height="4.3" depth="0.65" material="color: #400606"></a-box>
+  <a-box position=" 3.55 2.25  1" width="0.08" height="4.3" depth="0.65" material="color: #6e0c0c"></a-box>
+  <a-box position=" 3.55 2.25  3" width="0.08" height="4.3" depth="0.65" material="color: #400606"></a-box>
+  <!-- Floor lamp -->
+  <a-entity position="-2.5 0 -1.8">
+    <a-cylinder height="1.4" radius="0.024" material="color: #2a1404; metalness: .5"></a-cylinder>
+    <a-cone height="0.22" radius-bottom="0.15" radius-top="0.03" position="0 0.8 0" material="color: #c09050; opacity: .8"></a-cone>
+    <a-entity light="type: point; color: #d88020; intensity: .55; distance: 3.5" position="0 0.78 0"></a-entity>
   </a-entity>
-
-  <!-- The Figure — clickable -->
-  <a-entity id="figure" position="0 0 -2">
-    <!-- Body -->
-    <a-cylinder height="1.4" radius="0.22" position="0 0.7 0" material="color: #1a0a0a; roughness: 0.9"></a-cylinder>
-    <!-- Head -->
-    <a-sphere radius="0.18" position="0 1.58 0" material="color: #d4b896; roughness: 0.8"></a-sphere>
-    <!-- Eyes (dark) -->
-    <a-sphere radius="0.025" position="-0.06 1.62 0.16" material="color: #0a0000"></a-sphere>
-    <a-sphere radius="0.025" position="0.06 1.62 0.16" material="color: #0a0000"></a-sphere>
-    <!-- Click target -->
-    <a-box class="clickable" id="figure-click" position="0 1 0" width="0.8" height="1.8" depth="0.8"
-           material="opacity: 0; transparent: true"></a-box>
+  <!-- Side table + orb -->
+  <a-entity position="1.8 0 -2">
+    <a-cylinder height="0.52" radius="0.22" material="color: #281404; roughness: .8"></a-cylinder>
+    <a-sphere radius="0.07" position="0 0.36 0"
+      material="color: #f0a030; emissive: #e89028; emissiveIntensity: .6"
+      animation="property: material.emissiveIntensity; from: .35; to: .85; dur: 3200; easing: easeInOutSine; loop: true; dir: alternate"></a-sphere>
+    <a-entity light="type: point; color: #f0a030; intensity: .3; distance: 2.8" position="0 0.38 0"></a-entity>
   </a-entity>
-
-  <!-- Label above figure -->
-  <a-text id="figure-label" value="[ E ]" position="0 2.1 -2"
-          text="color: #804040; width: 3; align: center; font: monoid"
-          look-at="[camera]"
-          animation="property: position; from: 0 2.05 -2; to: 0 2.15 -2; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"></a-text>
-
-  <!-- Small table with object on it -->
-  <a-entity position="1.8 0 -1">
-    <a-cylinder height="0.5" radius="0.25" material="color: #2a1a0a; roughness: 0.8"></a-cylinder>
-    <!-- Lamp/orb -->
-    <a-sphere radius="0.08" position="0 0.35 0" material="color: #e8a040; emissive: #e8a040; emissiveIntensity: 0.3"></a-sphere>
-    <a-entity light="type: point; color: #e8a040; intensity: 0.2; distance: 2" position="0 0.4 0"></a-entity>
+  <!-- Chair -->
+  <a-entity position="0 0 1.1" rotation="0 180 0">
+    <a-box width=".52" height=".04" depth=".52" position="0 .43 0" material="color: #281404"></a-box>
+    <a-box width=".52" height=".56" depth=".04" position="0 .74 -.25" material="color: #281404"></a-box>
+    <a-cylinder height=".43" radius=".024" position="-.23 .215 .23" material="color: #180c02"></a-cylinder>
+    <a-cylinder height=".43" radius=".024" position=" .23 .215 .23" material="color: #180c02"></a-cylinder>
+    <a-cylinder height=".43" radius=".024" position="-.23 .215 -.23" material="color: #180c02"></a-cylinder>
+    <a-cylinder height=".43" radius=".024" position=" .23 .215 -.23" material="color: #180c02"></a-cylinder>
   </a-entity>
-
-  <!-- Chair (empty, facing figure) -->
-  <a-entity position="0 0 1.5">
-    <a-box width="0.5" height="0.05" depth="0.5" position="0 0.4 0" material="color: #2a1a0a"></a-box>
-    <a-box width="0.5" height="0.5" depth="0.05" position="0 0.65 -0.22" material="color: #2a1a0a"></a-box>
-    <a-box width="0.05" height="0.4" depth="0.05" position="-0.22 0.2 0.22" material="color: #1a0a0a"></a-box>
-    <a-box width="0.05" height="0.4" depth="0.05" position="0.22 0.2 0.22" material="color: #1a0a0a"></a-box>
-    <a-box width="0.05" height="0.4" depth="0.05" position="-0.22 0.2 -0.22" material="color: #1a0a0a"></a-box>
-    <a-box width="0.05" height="0.4" depth="0.05" position="0.22 0.2 -0.22" material="color: #1a0a0a"></a-box>
+  <!-- The Figure -->
+  <a-entity position="0 0 -2.5">
+    <a-cylinder height="1.5" radius="0.21" position="0 0.75 0" material="color: #0d0303; roughness: .95"></a-cylinder>
+    <a-sphere id="fhead" radius="0.195" position="0 1.65 0" material="color: #d4aa88; roughness: .65"></a-sphere>
+    <a-sphere id="eyeL" radius="0.026" position="-.07 1.685 0.172" material="color: #030000; emissive: #1a0808; emissiveIntensity: .5"></a-sphere>
+    <a-sphere id="eyeR" radius="0.026" position=" .07 1.685 0.172" material="color: #030000; emissive: #1a0808; emissiveIntensity: .5"></a-sphere>
+    <a-cylinder height=".62" radius=".052" position="-.3 .88 0" rotation="0 0 22" material="color: #0d0303"></a-cylinder>
+    <a-cylinder height=".62" radius=".052" position=" .3 .88 0" rotation="0 0 -22" material="color: #0d0303"></a-cylinder>
+    <a-entity light="type: point; color: #c05820; intensity: .35; distance: 2.8" position="0 2.2 0.55"
+              animation="property: light.intensity; from: .2; to: .5; dur: 4200; easing: easeInOutSine; loop: true; dir: alternate"></a-entity>
+    <a-box id="figure-click" grabbable="physics:false; immovable:true;"
+           position="0 1.1 0" width=".88" height="2.2" depth=".8" material="opacity:0;transparent:true"></a-box>
   </a-entity>
-
 </a-scene>
-
 <script>
-function enter() { document.getElementById('overlay').classList.add('gone'); }
-
-function showMsg(speaker, text) {
-  document.getElementById('msg-speaker').textContent = speaker;
-  document.getElementById('msg-text').textContent = text;
-  document.getElementById('msgbox').classList.add('show');
-}
-
-function closeMsg() {
-  document.getElementById('msgbox').classList.remove('show');
-}
-
-var clicked = false;
-var hoveredEl = null;
-
-function handleFigureClick() {
-  if (clicked) return;
-  clicked = true;
-  document.getElementById('figure-label').setAttribute('visible', false);
-  showMsg('The Figure',
-    'You cannot find the edge from inside your own head. You find it by reading what exists, understanding what it does, and identifying what it doesn\'t do. That gap — between what exists and what doesn\'t yet — is where your research lives. Go. Find the edge.'
-  );
-  setTimeout(function() {
-    document.getElementById('door-prompt').classList.add('show');
-  }, 1500);
-}
-
-document.querySelector('a-scene').addEventListener('loaded', function() {
-  document.querySelectorAll('.clickable').forEach(function(el) {
-    el.addEventListener('mouseenter', function() { hoveredEl = el; });
-    el.addEventListener('mouseleave', function() { if (hoveredEl === el) hoveredEl = null; });
-  });
-});
-
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'e' && e.key !== 'E') return;
-  if (!hoveredEl) return;
-  if (hoveredEl.id === 'figure-click') handleFigureClick();
+function enter(){var o=document.getElementById('overlay');o.classList.add('gone');setTimeout(function(){o.style.display='none'},600)}
+function showMsg(s,t){document.getElementById('spk').textContent=s;document.getElementById('txt').textContent=t;document.getElementById('msg').classList.add('show')}
+function closeMsg(){document.getElementById('msg').classList.remove('show');document.getElementById('exit').classList.add('show')}
+document.getElementById('figure-click').addEventListener('grab',function(e){
+  if(this.dataset.done){e.detail.grabbing.components.grabbing.drop();return}
+  this.dataset.done='1';
+  e.detail.grabbing.components.grabbing.drop();
+  document.getElementById('eyeL').setAttribute('material','color:#3a0000;emissive:#cc0000;emissiveIntensity:0.95');
+  document.getElementById('eyeR').setAttribute('material','color:#3a0000;emissive:#cc0000;emissiveIntensity:0.95');
+  showMsg('The Figure','You cannot find the edge from inside your own head. You find it by reading what exists, understanding what it does, and identifying what it doesn't do. That gap — between what exists and what doesn't yet — is where your research lives. Go. Find the edge.');
 });
 </script>
-
 </body>
 </html>
