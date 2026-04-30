@@ -125,11 +125,11 @@ function closeMsg(){document.getElementById('msg').classList.remove('show')}
 function hideLabel(n){var l=document.getElementById('lbl'+n);if(l)l.setAttribute('visible','false')}
 
 function showDecision(){
-  document.getElementById('dq').textContent='A student says their project is interdisciplinary, so it doesn't fit any field. What's the problem with this claim?';
+  document.getElementById('dq').textContent='A student says their project is interdisciplinary, so it doesn\'t fit any field. What\'s the problem with this claim?';
   var opts=document.getElementById('dopts');opts.innerHTML='';
   var cs=[
-    {t:'They're right — truly original work transcends fields.',c:false},
-    {t:'Interdisciplinary work sits at the intersection of multiple fields. You still need to know those fields. Being between them isn't the same as being outside them.',c:true},
+    {t:'They\'re right \u2014 truly original work transcends fields.',c:false},
+    {t:'Interdisciplinary work sits at the intersection of multiple fields. You still need to know those fields. Being between them isn\'t the same as being outside them.',c:true},
     {t:'They should pick one field and commit to it.',c:false}
   ];
   cs.forEach(function(o){
@@ -140,7 +140,7 @@ function showDecision(){
       b.classList.add(o.c?'cor':'wrg');
       if(!o.c)all.forEach(function(x){if(x.dataset.correct)x.classList.add('cor')});
       var fb=document.getElementById('dfb');
-      fb.textContent=o.c?'Correct. Interdisciplinarity is harder, not easier. You have to read in multiple directions. The intersection is where the work lives — not the void.':'Not quite. Interdisciplinary work sits between fields, not outside them. You still need to know the conversations in each. It's harder, not easier.';
+      fb.textContent=o.c?'Correct. Interdisciplinarity is harder, not easier. You have to read in multiple directions. The intersection is where the work lives \u2014 not the void.':'Not quite. Interdisciplinary work sits between fields, not outside them. You still need to know the conversations in each. It\'s harder, not easier.';
       fb.classList.add('show');
       setTimeout(function(){document.getElementById('dec').classList.remove('show');document.getElementById('exit').classList.add('show')},4000);
     };
@@ -158,8 +158,8 @@ function showDecision(){
     hideLabel(i+1);
     var msgs=[
       ['Voice behind the door','A field is not a topic. It is not a discipline. It is the community of people working on related problems, and the body of work they have produced. It is a living, ongoing conversation.'],
-      ['Voice behind the door','In creative computing, your field is almost never a single discipline. It might include a technical literature, an artistic lineage, a critical discourse, and a design community. You don't need to master all of these — but you need to know which ones matter for your project.'],
-      ['Voice behind the door','You wouldn't walk into a room full of people discussing something, ignore everything they've said, and start talking about your own thing. That's what a project without context looks like. A literature review is proof that you've been listening.'],
+      ['Voice behind the door','In creative computing, your field is almost never a single discipline. It might include a technical literature, an artistic lineage, a critical discourse, and a design community. You don\'t need to master all of these \u2014 but you need to know which ones matter for your project.'],
+      ['Voice behind the door','You wouldn\'t walk into a room full of people discussing something, ignore everything they\'ve said, and start talking about your own thing. That\'s what a project without context looks like. A literature review is proof that you\'ve been listening.'],
       null
     ];
     if(msgs[i])showMsg(msgs[i][0],msgs[i][1]);
